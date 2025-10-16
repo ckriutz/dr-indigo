@@ -1,0 +1,4 @@
+# Add project dependencies here, for example:
+# fastapi==0.100.0
+# uvicorn==0.22.0
+agent-framework --pre
