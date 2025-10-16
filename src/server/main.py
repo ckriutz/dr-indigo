@@ -1,8 +1,9 @@
 import asyncio
 import dotenv
 import os
+
 from medical_emergency_agent import create_agent as create_emergency_agent
-#from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
+from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
 from agent_framework.azure import AzureOpenAIChatClient
 
 # Configuration
@@ -17,15 +18,18 @@ chat_client = AzureOpenAIChatClient(
     deployment_name=deployment,
 )
 
+joint_surgery_agent = create_joint_surgery_agent(chat_client)
+med_emergency_agent = create_emergency_agent(chat_client)
+
 async def main():
     question = "What should I eat before a knee replacement surgery?"
-    med_emergency_agent = create_emergency_agent(chat_client)
+    
     response = await med_emergency_agent.run(question)
     print("Medical Emergency Agent Response:", response)
 
-    #joint_surgery_agent = create_joint_surgery_agent(chat_client)
-    #response = await joint_surgery_agent.run(question)
-    #print("Joint Surgery Information Agent Response:", response)
+    
+    response = await joint_surgery_agent.run(question)
+    print("Joint Surgery Information Agent Response:", response)
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -2,3 +2,4 @@
 # fastapi==0.100.0
 # uvicorn==0.22.0
 agent-framework --pre
+PyPDF2==3.0.1
