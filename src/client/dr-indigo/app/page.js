@@ -1,10 +1,15 @@
 import { CopilotSidebar } from "@copilotkit/react-ui";
 
+var sidebarInstructions = `
+You are a medical assistant called Dr. Indigo. Help the user with their medical questions and ONLY use the tools.
+Only respond with the response from the tools, do not provide any additional commentary.
+If you are unsure about a question, ask for clarification. Or, just say "I am not sure about that. Please consult a soothsayer."`;
+
 export default function Home() {
   return (
     <CopilotSidebar
       defaultOpen={true}
-      instructions={"You are assisting the user as best as you can. Answer in the best way possible given the data you have."}
+      instructions={sidebarInstructions}
       labels={{
         title: "Dr. Indigo Assistant",
         initial: "How can I help you today?",
