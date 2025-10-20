@@ -26,7 +26,7 @@ param userIdentityId string
 param userIdentityPrincipalId string
 
 // Fixed runtime settings (simplified: edit module to change)
-var targetPort = 8080
+var targetPort = 80
 var externalIngress = true
 var cpuCores = 1
 var memoryGi = '2.0'
@@ -53,50 +53,27 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
     }
   }
   properties: {
-    managedEnvironmentId: environmentId
+    environmentId: environmentId
+    
     configuration: {
       ingress: {
         external: true
         targetPort: targetPort
-        transport: 'auto'
       }
-      registries: [
-        {
-          server: registryServer
-          identity: userIdentityId
-        }
-      ]
     }
     template: {
-      revisionSuffix: 'r1'
+      
       containers: [
         {
-          name: 'main'
+          name: 'hello'
           image: containerImage
-          resources: {
-            cpu: cpuCores
-            memory: '${memoryGi}Gi'
-          }
+          probes: []
         }
       ]
       scale: {
         minReplicas: 0
-        maxReplicas: 3
       }
     }
-    workloadProfileName: 'Consumption'
-  }
-}
-
-// Assign AcrPull role to the container app managed identity
-// Built-in role id for AcrPull: 7f951dda-4ed3-4680-a7ca-43fe172d538d
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(app.id, 'acrpull')
-  scope: acr
-  properties: {
-    principalId: userIdentityPrincipalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalType: 'ServicePrincipal'
   }
 }
 
@@ -107,7 +84,7 @@ output name string = app.name
 output id string = app.id
 
 @description('Container App FQDN (only if ingress enabled)')
-output fqdn string = externalIngress ? app.properties.latestRevisionFqdn : ''
+output fqdn string = app.properties.configuration.ingress.fqdn
 
 @description('Managed Identity Principal Id')
 output principalId string = userIdentityPrincipalId

@@ -18,7 +18,7 @@ param cosmosPartitionKeyPath string = '/id'
 @description('Enable ACR admin user (not recommended for production)')
 param acrAdminUserEnabled bool = false
 @description('Container image to deploy to Container App')
-param containerImage string = ''
+param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: toLower('${prefix}-rg')
@@ -155,7 +155,7 @@ module userIdentity 'modules/hostLayer/identity.bicep' = {
 
 // Deploy Container App (application workload)
 // Still working on container app template - so this module still has a couple of failures
-/*
+
 module containerApp 'modules/hostLayer/app.bicep' = {
   scope: resourceGroup
   name: 'containerAppDeployment'
@@ -171,7 +171,7 @@ module containerApp 'modules/hostLayer/app.bicep' = {
     userIdentityPrincipalId: userIdentity.outputs.userIdentityPrincipalId
   }
 }
-*/
+
 
 output resourceGroupId string = resourceGroup.id
 output storageAccountName string = storageAccount.outputs.storageAccountName
