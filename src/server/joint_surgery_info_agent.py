@@ -1,4 +1,4 @@
-from agent_framework import ChatAgent
+from agent_framework import AgentExecutor, ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 from PyPDF2 import PdfReader
 import os
@@ -51,6 +51,35 @@ def get_joint_surgery_data(force_reload: bool = False) -> str:
             _pdf_cache = ""
             return _pdf_cache
 
+def create_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
+    # Preload the PDF content into the module cache to include it in the agent instructions
+    pdf_content = get_joint_surgery_data()
+    agent = AgentExecutor(
+        client.create_agent(
+            instructions=f"""
+            You are a Joint Surgery Information Agent. Your role is to answer questions about total joint surgery 
+            using ONLY the information provided in the guide below.
+
+            IMPORTANT RULES:
+            - Answer questions ONLY about joint surgery topics
+            - Base your answers ONLY on the information in the provided guide
+            - If a question is not related to joint surgery, politely decline and explain that you only answer questions about joint surgery
+            - If the answer is not found in the guide, say so honestly
+            - Provide clear, accurate, and helpful responses based on the guide content
+            - Do not make up information or provide medical advice beyond what's in the guide
+
+            GUIDE TO TOTAL JOINT SURGERY:
+            {pdf_content}
+            """,
+            tools=[]
+        ),
+        # Emit the agent run response as a workflow output so callers can inspect
+        # the assistant's answer directly from WorkflowRunResult.get_outputs().
+        output_response=True,
+        id="joint_surgery_info_agent_executor",
+    )
+    return agent
+
 def create_agent(client: AzureOpenAIChatClient):
     # Preload the PDF content into the module cache. This avoids reading the file on every call.
     pdf_content = get_joint_surgery_data()
@@ -75,7 +104,8 @@ def create_agent(client: AzureOpenAIChatClient):
     agent = ChatAgent(
         chat_client=client,
         tools=[],
-        instructions=instructions
+        instructions=instructions,
+        name="JointSurgeryInfoAgent"
     )
 
     return agent
