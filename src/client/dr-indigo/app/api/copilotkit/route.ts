@@ -5,6 +5,7 @@ import {
 } from '@copilotkit/runtime';
 import OpenAI from 'openai';
 import { NextRequest } from 'next/server';
+
 const apiKey = process.env["AZURE_OPENAI_API_KEY"];
 const resource = process.env["AZURE_OPENAI_RESOURCE"];
 const deployment = process.env["AZURE_OPENAI_DEPLOYMENT"];
@@ -21,8 +22,11 @@ const openai = new OpenAI({
     defaultQuery: { "api-version": apiVersion },
     defaultHeaders: { "api-key": apiKey },
 });
-const serviceAdapter = new OpenAIAdapter({ openai });
 
+const serviceAdapter = new OpenAIAdapter({
+    openai: openai as any,
+    model: deployment,
+});
 
 const runtime = new CopilotRuntime({
     remoteEndpoints: [
