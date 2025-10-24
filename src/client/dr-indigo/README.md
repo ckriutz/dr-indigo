@@ -1,5 +1,35 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+## Environment Setup
+
+Before running the development server, you need to configure your environment variables:
+
+1. **Rename `.env.sample` to `.env`** in the project root directory
+2. **Update the environment variables** with your Azure OpenAI configuration
+
+The environment variables are used in `app/api/copilotkit/route.ts` to configure the CopilotKit runtime with Azure OpenAI.
+
+### Environment Variables Example
+
+Create a `.env` file with the following variables:
+
+```bash
+AZURE_OPENAI_API_KEY=your-azure-openai-api-key
+AZURE_OPENAI_RESOURCE=your-resource-name
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=your-deployment-name
+AZURE_OPENAI_API_VERSION=2024-04-01-preview
+COPILOTKIT_REMOTE_ENDPOINT=http://localhost:8000/copilotkit_remote
+```
+
+**Variable Descriptions:**
+- `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key (required)
+- `AZURE_OPENAI_RESOURCE`: Your Azure resource name (required)
+- `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL (optional - defaults to https://{resource}.openai.azure.com/)
+- `AZURE_OPENAI_DEPLOYMENT`: Your deployment name (required)
+- `AZURE_OPENAI_API_VERSION`: API version for Azure OpenAI (optional - defaults to 2024-04-01-preview)
+- `COPILOTKIT_REMOTE_ENDPOINT`: Remote endpoint for CopilotKit (optional - defaults to http://localhost:8000/copilotkit_remote)
+
 ## Getting Started
 
 First, run the development server:
@@ -29,8 +59,6 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Docker
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Docker deployment configuration is planned. (TBD)
