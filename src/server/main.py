@@ -6,11 +6,10 @@ from typing import Any, Never
 import dotenv
 from pydantic import BaseModel
 from agent_framework.azure import AzureOpenAIChatClient
-from medical_emergency_agent import create_agent as create_emergency_agent, IsMedicalEmergencyResult
-from medical_emergency_agent import create_executor_agent as create_emergency_executor_agent
+from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
+from medical_triage_agent import create_executor_agent as create_triage_executor_agent
 from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
-from medical_guidance_agent import create_agent as create_medical_guidance_executor_agent, IsMedicalGuidanceResult
 
 from agent_framework import (
     AgentExecutorRequest,
@@ -44,46 +43,38 @@ chat_client = AzureOpenAIChatClient(
     deployment_name=deployment,
 )
 
-joint_surgery_agent = create_joint_surgery_agent(chat_client)
-med_emergency_agent = create_emergency_agent(chat_client)
+# Create agents
+med_triage_agent_executor = create_triage_executor_agent(chat_client)
+med_triage_agent = create_triage_agent(chat_client)
+joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
 
-med_emergency_agent_executor = create_emergency_executor_agent(chat_client)
-medical_guidance_executor_agent = create_medical_guidance_executor_agent(chat_client)
-joint_surgery_agent_executor = create_joint_surgery_executor_agent(chat_client)
-
+# Lets make sure the json returned is valid, and route based on the boolean value.
 def condition_medical_emergency(message: Any) -> bool:
     # Defensive guard. If a non AgentExecutorResponse appears, let the edge pass to avoid dead ends.
     if not isinstance(message, AgentExecutorResponse):
         return True
     try:
-        # Prefer parsing a structured DetectionResult from the agent JSON text.
         # Using model_validate_json ensures type safety and raises if the shape is wrong.
-        detection = IsMedicalEmergencyResult.model_validate_json(message.agent_run_response.text)
-        # Route to the joint surgery agent only when the message is NOT a medical emergency.
-        # In other words, if the detector returns False for `is_medical_emergency`, we continue
-        # to the joint surgery information agent for normal informational queries.
-        return not detection.is_medical_emergency
+        detection = MedicalTriageResult.model_validate_json(message.agent_run_response.text)
+        return detection.is_medical_emergency
     except Exception:
         # Fail closed on parse errors so we do not accidentally route to the wrong path.
         # Returning False prevents this edge from activating.
         return False
 
 
+# Lets make sure the json returned is valid, and route based on the boolean value.
 def condition_medical_guidance(message: Any) -> bool:
-    """
-    Determine whether the message should be routed to the joint surgery agent.
-
-    This expects an AgentExecutorResponse holding an IsMedicalGuidanceResult JSON.
-    Returns True when the message is NOT medical guidance (safe to route to joint surgery),
-    and False otherwise. On parse errors we "fail closed" and return False.
-    """
     # Defensive guard. If a non AgentExecutorResponse appears, let the edge pass to avoid dead ends.
     if not isinstance(message, AgentExecutorResponse):
         return True
     try:
-        detection = IsMedicalGuidanceResult.model_validate_json(message.agent_run_response.text)
-        return not detection.is_medical_guidance
+        # Using model_validate_json ensures type safety and raises if the shape is wrong.
+        detection = MedicalTriageResult.model_validate_json(message.agent_run_response.text)
+        return detection.is_medical_advice
     except Exception:
+        # Fail closed on parse errors so we do not accidentally route to the wrong path.
+        # Returning False prevents this edge from activating.
         return False
 
 # So this is just a simple handler that replies with emergency instructions.
@@ -102,14 +93,12 @@ async def handle_medical_guidance(response: AgentExecutorResponse, ctx: Workflow
 
 workflow = (
     WorkflowBuilder()
-    .set_start_executor(med_emergency_agent_executor)
-    # Start by short circuiting medical emergencies.
-    .add_edge(med_emergency_agent_executor, handle_emergency, condition=lambda msg: not condition_medical_emergency(msg))
-    # At this point, we know it's NOT a medical emergency. Lets make sure it's not a medical question.
-    .add_edge(med_emergency_agent_executor, medical_guidance_executor_agent, condition=condition_medical_emergency)
-    .add_edge(medical_guidance_executor_agent, handle_medical_guidance, condition=lambda msg: not condition_medical_guidance(msg))
+    .set_start_executor(med_triage_agent_executor)
+    # Start by short circuiting medical emergencies and medical advice.
+    .add_edge(med_triage_agent_executor, handle_emergency, condition=lambda msg: condition_medical_emergency(msg))
+    .add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
     # So for this edge, it's not a medical emergency, or medical guidance, and we can move it to the joint surgery agent.
-    .add_edge(medical_guidance_executor_agent, joint_surgery_agent_executor, condition=condition_medical_guidance)
+    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
     .build()
 )
 
@@ -186,7 +175,7 @@ def pretty_print_event(index: int, event: object) -> None:
     print(f"{prefix} {event}")
 
 async def main():
-    question = "I'm currently on fire."
+    question = "I'm currently on fire and having a hard time breathing."
     print("Asking question:", question)
 
     request = AgentExecutorRequest(messages=[ChatMessage(Role.USER, text=question)], should_respond=True)
@@ -195,9 +184,9 @@ async def main():
     # Print all events for debugging so we can see agent run events even if they are not
     # produced as WorkflowOutputEvent instances. This uses emojis for agent events.
 
-    #print("Workflow events:")
-    #for i, ev in enumerate(events):
-    #    pretty_print_event(i, ev)
+    print("Workflow events:")
+    for i, ev in enumerate(events):
+        pretty_print_event(i, ev)
 
     outputs = events.get_outputs()
     if outputs:
