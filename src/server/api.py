@@ -99,28 +99,28 @@ async def fetch_name_for_user_id(userId: str):
     return {"name": "User_" + userId}
 
 # this is the medical emergency action for demonstration purposes
-async def ask_medical_emergency_agent(question: str):
-    print("Received question in ask_medical_emergency_agent:", question)
+async def ask_medical_question_workflow_agent(question: str):
+    print("Received question in ask_medical_question_workflow_agent:", question)
     request = AgentExecutorRequest(messages=[ChatMessage(Role.USER, text=question)], should_respond=True)
     events = await workflow.run(request)
     outputs = events.get_outputs()
     response = outputs[-1]
-    print("Medical Emergency Agent Response in action:", response)
+    print("Medical Question Agent Response in action:", response)
     return {"response": response}
 
 
-medical_emergency_action = CopilotAction(
-    name="askMedicalEmergencyAgent",
-    description="Send a question to the medical emergency agent and get a response of either 'EMERGENCY' or 'NOT_EMERGENCY'.",
+medical_question_action = CopilotAction(
+    name="askMedicalQuestionAgent",
+    description="Send a question to the medical question agent and get a response.",
     parameters=[
         {
             "name": "question",
             "type": "string",
-            "description": "The medical question to ask the emergency agent.",
+            "description": "The medical question to ask the question agent.",
             "required": True,
         }
     ],
-    handler=ask_medical_emergency_agent
+    handler=ask_medical_question_workflow_agent
 )
 
 userIdAction = CopilotAction(
@@ -137,7 +137,7 @@ userIdAction = CopilotAction(
     handler=fetch_name_for_user_id
 )
 # Initialize the CopilotKit SDK
-sdk = CopilotKitRemoteEndpoint(actions=[userIdAction, medical_emergency_action]) 
+sdk = CopilotKitRemoteEndpoint(actions=[userIdAction, medical_question_action]) 
 
 # Add the CopilotKit endpoint to your FastAPI app
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 
