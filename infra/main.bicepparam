@@ -13,7 +13,7 @@ param networkAddressPrefixes = {
   containerAppEnv: '10.10.2.0/24'
 }
 
-param containerImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+param containerImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 param cosmosPartitionKeyPath = '/id'
 

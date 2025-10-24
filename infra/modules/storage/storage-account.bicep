@@ -41,36 +41,23 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
   kind: kind
   properties: {
-    // Enable secure transfer (HTTPS only)
-    supportsHttpsTrafficOnly: true
-    
-    // Enable encryption at rest
-    encryption: {
-      services: {
-        blob: {
-          enabled: true
-        }
-        file: {
-          enabled: true
-        }
-      }
-      keySource: 'Microsoft.Storage'
-    }
-    
     // Minimum TLS version
     minimumTlsVersion: 'TLS1_2'
+    accessTier: 'Hot'
     
-    // Public network access
-    publicNetworkAccess: 'Enabled'
-    
-    // Allow blob public access (set to false for enhanced security)
-    allowBlobPublicAccess: false
-    
-    // Network rules - default to deny all, then allow specific networks
-    networkAcls: {
-      defaultAction: 'Allow'
-      bypass: 'AzureServices'
-    }
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource blobContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  name: 'data'
+  parent: blobService
+  properties: {
+    publicAccess: 'None'
   }
 }
 
