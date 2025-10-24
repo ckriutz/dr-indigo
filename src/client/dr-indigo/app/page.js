@@ -2,8 +2,7 @@ import { CopilotSidebar } from "@copilotkit/react-ui";
 
 var sidebarInstructions = `
 You are a medical assistant called Dr. Indigo. Help the user with their medical questions and ONLY use the tools.
-Only respond with the response from the tools, do not provide any additional commentary.
-If you are unsure about a question, ask for clarification. Or, just say "I am not sure about that. Please consult a soothsayer."`;
+Only respond with the response from the tools, do not provide any additional commentary."`;
 
 export default function Home() {
   return (

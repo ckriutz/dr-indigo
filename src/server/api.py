@@ -9,11 +9,10 @@ from agent_framework.azure import AzureOpenAIChatClient
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 
-from medical_emergency_agent import create_agent as create_emergency_agent, IsMedicalEmergencyResult
-from medical_emergency_agent import create_executor_agent as create_emergency_executor_agent
+from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
+from medical_triage_agent import create_executor_agent as create_triage_executor_agent
 from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
-from medical_guidance_agent import create_agent as create_medical_guidance_executor_agent, IsMedicalGuidanceResult
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -29,8 +28,8 @@ chat_client = AzureOpenAIChatClient(
 )
 
 # Create agents
-med_emergency_agent_executor = create_emergency_executor_agent(chat_client)
-medical_guidance_executor_agent = create_medical_guidance_executor_agent(chat_client)
+med_triage_agent_executor = create_triage_executor_agent(chat_client)
+med_triage_agent = create_triage_agent(chat_client)
 joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
 
 # Lets make sure the json returned is valid, and route based on the boolean value.
@@ -39,13 +38,9 @@ def condition_medical_emergency(message: Any) -> bool:
     if not isinstance(message, AgentExecutorResponse):
         return True
     try:
-        # Prefer parsing a structured DetectionResult from the agent JSON text.
         # Using model_validate_json ensures type safety and raises if the shape is wrong.
-        detection = IsMedicalEmergencyResult.model_validate_json(message.agent_run_response.text)
-        # Route to the joint surgery agent only when the message is NOT a medical emergency.
-        # In other words, if the detector returns False for `is_medical_emergency`, we continue
-        # to the joint surgery information agent for normal informational queries.
-        return not detection.is_medical_emergency
+        detection = MedicalTriageResult.model_validate_json(message.agent_run_response.text)
+        return detection.is_medical_emergency
     except Exception:
         # Fail closed on parse errors so we do not accidentally route to the wrong path.
         # Returning False prevents this edge from activating.
@@ -58,34 +53,37 @@ def condition_medical_guidance(message: Any) -> bool:
     if not isinstance(message, AgentExecutorResponse):
         return True
     try:
-        detection = IsMedicalGuidanceResult.model_validate_json(message.agent_run_response.text)
-        return not detection.is_medical_guidance
+        # Using model_validate_json ensures type safety and raises if the shape is wrong.
+        detection = MedicalTriageResult.model_validate_json(message.agent_run_response.text)
+        return detection.is_medical_advice
     except Exception:
+        # Fail closed on parse errors so we do not accidentally route to the wrong path.
+        # Returning False prevents this edge from activating.
         return False
     
 # So this is just a simple handler that replies with emergency instructions.
 # No LLM needed, and whatever we put in here is what the workflow will output.
 @executor(id="reply_emergency")
 async def handle_emergency(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
+    print("Handling emergency response:", response)
     await ctx.yield_output(f"Yo, you should call 911 or go to the emergency room!")
 
 # So this is just a simple handler that replies with medical guidance instructions.
 # No LLM needed, and whatever we put in here is what the workflow will output.
 @executor(id="reply_medical_guidance")
 async def handle_medical_guidance(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
+    print("Handling medical guidance response:", response)
     await ctx.yield_output(f"Sadly, I can't help with giving medical advice. Please consult a healthcare professional for guidance.")
 
 # Here is our workflow definition.
 workflow = (
     WorkflowBuilder()
-    .set_start_executor(med_emergency_agent_executor)
-    # Start by short circuiting medical emergencies.
-    .add_edge(med_emergency_agent_executor, handle_emergency, condition=lambda msg: not condition_medical_emergency(msg))
-    # At this point, we know it's NOT a medical emergency. Lets make sure it's not a medical question.
-    .add_edge(med_emergency_agent_executor, medical_guidance_executor_agent, condition=condition_medical_emergency)
-    .add_edge(medical_guidance_executor_agent, handle_medical_guidance, condition=lambda msg: not condition_medical_guidance(msg))
+    .set_start_executor(med_triage_agent_executor)
+    # Start by short circuiting medical emergencies and medical advice.
+    .add_edge(med_triage_agent_executor, handle_emergency, condition=lambda msg: condition_medical_emergency(msg))
+    .add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
     # So for this edge, it's not a medical emergency, or medical guidance, and we can move it to the joint surgery agent.
-    .add_edge(medical_guidance_executor_agent, joint_surgery_agent_executor_agent, condition=condition_medical_guidance)
+    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
     .build()
 )
 
@@ -94,9 +92,10 @@ app = FastAPI()
 
 # Backend Actions.
 # this is a dummy action for demonstration purposes, but will work in testing.
-async def fetch_name_for_user_id(userId: str):
+async def reply_greeting(greeting: str):
     # Replace with your database logic
-    return {"name": "User_" + userId}
+    print("Received greeting in reply_greeting action:", greeting)
+    return {"greeting": greeting}
 
 # this is the medical emergency action for demonstration purposes
 async def ask_medical_question_workflow_agent(question: str):
@@ -123,21 +122,23 @@ medical_question_action = CopilotAction(
     handler=ask_medical_question_workflow_agent
 )
 
-userIdAction = CopilotAction(
-    name="fetchNameForUserId",
-    description="Fetches user name from the database for a given ID.",
+# Greeting Action
+greetingAction = CopilotAction(
+    name="replyGreeting",
+    description="When the user says hello, or gives their name, or any other general greeting, reply with a greeting message.",
     parameters=[
         {
-            "name": "userId",
+            "name": "greeting",
             "type": "string",
-            "description": "The ID of the user to fetch data for.",
+            "description": "The greeting message to reply with.",
             "required": True,
         }
     ],
-    handler=fetch_name_for_user_id
+    handler=reply_greeting
 )
+
 # Initialize the CopilotKit SDK
-sdk = CopilotKitRemoteEndpoint(actions=[userIdAction, medical_question_action]) 
+sdk = CopilotKitRemoteEndpoint(actions=[greetingAction, medical_question_action]) 
 
 # Add the CopilotKit endpoint to your FastAPI app
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 

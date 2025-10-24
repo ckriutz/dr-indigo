@@ -3,11 +3,12 @@ import {
     OpenAIAdapter,
     copilotRuntimeNextJSAppRouterEndpoint,
 } from '@copilotkit/runtime';
-import OpenAI from 'openai';
+import OpenAI, { AzureOpenAI } from 'openai';
 import { NextRequest } from 'next/server';
 
 const apiKey = process.env["AZURE_OPENAI_API_KEY"];
 const resource = process.env["AZURE_OPENAI_RESOURCE"];
+const endpoint = process.env["AZURE_OPENAI_ENDPOINT"];
 const deployment = process.env["AZURE_OPENAI_DEPLOYMENT"];
 const apiVersion = process.env["AZURE_OPENAI_API_VERSION"] || "2024-04-01-preview";
 const remoteEndpoint = process.env["COPILOTKIT_REMOTE_ENDPOINT"] || "http://localhost:8000/copilotkit_remote";
@@ -16,22 +17,24 @@ if (!apiKey) throw new Error("The AZURE_OPENAI_API_KEY environment variable is m
 if (!resource) throw new Error("The AZURE_OPENAI_RESOURCE environment variable is missing or empty.");
 if (!deployment) throw new Error("The AZURE_OPENAI_DEPLOYMENT environment variable is missing or empty.");
 
-const openai = new OpenAI({
+const azureOpenAI = new AzureOpenAI({
     apiKey,
-    baseURL: `https://${resource}.openai.azure.com/openai/deployments/${deployment}`,
-    defaultQuery: { "api-version": apiVersion },
-    defaultHeaders: { "api-key": apiKey },
+    endpoint: endpoint || `https://${resource}.openai.azure.com/`,
+    deployment: deployment,
+    apiVersion,
 });
 
 const serviceAdapter = new OpenAIAdapter({
-    openai: openai as any,
+    openai: azureOpenAI as any,
     model: deployment,
 });
 
 const runtime = new CopilotRuntime({
     remoteEndpoints: [
         { url: remoteEndpoint },
-    ],
+    ],onError: (error) => {
+        console.error("Copilot Runtime Error:", error);
+    }
 });
 export const POST = async (req: NextRequest) => {
     const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
