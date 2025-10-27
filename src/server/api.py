@@ -14,8 +14,47 @@ from medical_triage_agent import create_executor_agent as create_triage_executor
 from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
 
+from langfuse import Langfuse
+
+os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
+
 # Load environment variables
 dotenv.load_dotenv()
+
+# Setup Langfuse observability
+try:
+    from agent_framework.observability import setup_observability
+    import httpx
+
+    # Create httpx client with custom SSL certificate for Langfuse
+    httpx_client = httpx.Client(verify="novant_ssl.cer")
+
+    # Initialize Langfuse with custom SSL configuration
+    langfuse = Langfuse(
+        secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
+        public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
+        host=os.environ.get("LANGFUSE_HOST"),
+        httpx_client=httpx_client
+    )
+    
+    # Setup observability
+    setup_observability(enable_sensitive_data=True)
+    print("✅ Observability setup completed!")
+    
+    # Verify Langfuse connection
+    try:
+        if langfuse.auth_check():
+            print("✅ Langfuse client authenticated and ready!")
+        else:
+            print("⚠️  Langfuse authentication failed")
+    except Exception as e:
+        print(f"⚠️  Langfuse auth check error: {e}")
+    
+except ImportError as e:
+    print(f"⚠️  setup_observability not available. Error: {e}")
+    print("⚠️  Continuing without observability setup.")
+    langfuse = None
+
 api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
 deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
