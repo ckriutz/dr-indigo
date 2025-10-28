@@ -1,13 +1,20 @@
 import os
 from typing import Any, Never
+from workflow_agent_adapter import WorkflowAgentAdapter
 
-from agent_framework import AgentExecutorRequest, AgentExecutorResponse, ChatMessage, Role, WorkflowBuilder, WorkflowContext, executor
+from agent_framework import (
+    AgentExecutorResponse,
+    WorkflowBuilder,
+    WorkflowContext,
+    executor,
+)
 import dotenv
 from fastapi import FastAPI
 
 from agent_framework.azure import AzureOpenAIChatClient
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
+from ag_ui_agent_framework import AgentFrameworkRunner, add_agent_framework_fastapi_endpoint
 
 from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
 from medical_triage_agent import create_executor_agent as create_triage_executor_agent
@@ -87,61 +94,17 @@ workflow = (
     .build()
 )
 
+
+
 # Initialize FastAPI app
 app = FastAPI()
 
-# Backend Actions.
-# this is a dummy action for demonstration purposes, but will work in testing.
-async def reply_greeting(greeting: str):
-    # Replace with your database logic
-    print("Received greeting in reply_greeting action:", greeting)
-    return {"greeting": greeting}
-
-# this is the medical emergency action for demonstration purposes
-async def ask_medical_question_workflow_agent(question: str):
-    print("Received question in ask_medical_question_workflow_agent:", question)
-    request = AgentExecutorRequest(messages=[ChatMessage(Role.USER, text=question)], should_respond=True)
-    events = await workflow.run(request)
-    outputs = events.get_outputs()
-    response = outputs[-1]
-    print("Medical Question Agent Response in action:", response)
-    return {"response": response}
-
-
-medical_question_action = CopilotAction(
-    name="askMedicalQuestionAgent",
-    description="Send a question to the medical question agent and get a response.",
-    parameters=[
-        {
-            "name": "question",
-            "type": "string",
-            "description": "The medical question to ask the question agent.",
-            "required": True,
-        }
-    ],
-    handler=ask_medical_question_workflow_agent
-)
-
-# Greeting Action
-greetingAction = CopilotAction(
-    name="replyGreeting",
-    description="When the user says hello, or gives their name, or any other general greeting, reply with a greeting message.",
-    parameters=[
-        {
-            "name": "greeting",
-            "type": "string",
-            "description": "The greeting message to reply with.",
-            "required": True,
-        }
-    ],
-    handler=reply_greeting
-)
-
-# Initialize the CopilotKit SDK
-sdk = CopilotKitRemoteEndpoint(actions=[greetingAction, medical_question_action]) 
+# Initialize AG-UI middleware endpoint
+ag_ui_runner = AgentFrameworkRunner(WorkflowAgentAdapter(workflow))
 
 # Add the CopilotKit endpoint to your FastAPI app
-add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 
+# add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 
+add_agent_framework_fastapi_endpoint(app, ag_ui_runner, "/agent-framework")
 def main():
     """Run the uvicorn server."""
     import uvicorn
