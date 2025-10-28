@@ -3,3 +3,9 @@ PyPDF2
 copilotkit
 fastapi
 uvicorn
+python-dotenv
+fastmcp
+azure-storage-blob
+azure-identity
+azure-search-documents
+azure-core
