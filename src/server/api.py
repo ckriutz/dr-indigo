@@ -9,9 +9,7 @@ from agent_framework.azure import AzureOpenAIChatClient
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 
-from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
-from medical_triage_agent import create_executor_agent as create_triage_executor_agent
-from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
+from medical_triage_agent import create_executor_agent as create_triage_executor_agent, MedicalTriageResult
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
 
 # Load environment variables
@@ -29,7 +27,6 @@ chat_client = AzureOpenAIChatClient(
 
 # Create agents
 med_triage_agent_executor = create_triage_executor_agent(chat_client)
-med_triage_agent = create_triage_agent(chat_client)
 joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
 
 # Lets make sure the json returned is valid, and route based on the boolean value.
