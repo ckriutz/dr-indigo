@@ -5,8 +5,9 @@
 --extra-index-url https://copilotkit.gateway.scarf.sh/simple
 
 # Direct dependencies
-agent-framework==1.0.0b251007
+agent-framework#==1.0.0b251007
 PyPDF2==3.0.1
 copilotkit==0.1.69
 fastapi==0.115.14
 uvicorn==0.37.0
+langfuse
