@@ -14,7 +14,7 @@ from medical_triage_agent import create_executor_agent as create_triage_executor
 from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
 
-from langfuse import Langfuse
+
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -22,6 +22,7 @@ dotenv.load_dotenv()
 # Setup Langfuse observability
 try:
     from agent_framework.observability import setup_observability
+    from langfuse import Langfuse
     import httpx
 
     os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
