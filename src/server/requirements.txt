@@ -10,3 +10,9 @@ PyPDF2==3.0.1
 copilotkit==0.1.69
 fastapi==0.115.14
 uvicorn==0.37.0
+python-dotenv
+fastmcp
+azure-storage-blob
+azure-identity
+azure-search-documents
+azure-core
