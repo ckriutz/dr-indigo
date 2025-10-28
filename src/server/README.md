@@ -72,8 +72,38 @@ To test the workflow directly without the API:
 ```bash
 python main.py
 ```
-
 This runs a standalone test of the medical triage workflow with debug output showing all workflow events.
+
+### Docker Container
+
+Building the container:
+```bash
+docker build --tag agent-api:v1.1 . 
+```
+
+Running the container:
+```bash
+docker run -d --name dr-indigo-server -p 8000:8000 --env-file ./.env agent-api:v1.2 
+```
+Checking container logs: 
+```bash
+docker logs dr-indigo-server
+```
+If the container is running successfully, the API will be available at the following urls for the: 
+- Documentation
+  - http://localhost:8000/docs
+- CopilotKit Endpoint
+  - http://localhost:8000/copilotkit_remote
+
+
+Stopping the container:
+```bash
+docker stop dr-indigo-server
+```
+Deleting the container:
+```bash
+docker rm dr-indigo-server
+```
 
 ## Features
 
