@@ -16,8 +16,6 @@ from joint_surgery_info_agent import create_executor_agent as create_joint_surge
 
 from langfuse import Langfuse
 
-os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
-
 # Load environment variables
 dotenv.load_dotenv()
 
@@ -25,6 +23,8 @@ dotenv.load_dotenv()
 try:
     from agent_framework.observability import setup_observability
     import httpx
+
+    os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
 
     # Create httpx client with custom SSL certificate for Langfuse
     httpx_client = httpx.Client(verify="novant_ssl.cer")
