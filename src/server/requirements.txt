@@ -5,8 +5,8 @@
 --extra-index-url https://copilotkit.gateway.scarf.sh/simple
 
 # Direct dependencies
-agent-framework==1.0.0b251007
+git+https://github.com/mheindl-nh/ag-ui.git@main#egg=ag-ui-agent-framework&subdirectory=integrations/agent-framework/python
 PyPDF2==3.0.1
-copilotkit==0.1.69
+copilotkit==0.1.70
 fastapi==0.115.14
-uvicorn==0.37.0
+uvicorn==0.34.3
