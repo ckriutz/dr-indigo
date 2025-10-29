@@ -3,7 +3,8 @@ import {
     OpenAIAdapter,
     copilotRuntimeNextJSAppRouterEndpoint,
 } from '@copilotkit/runtime';
-import OpenAI, { AzureOpenAI } from 'openai';
+import { HttpAgent } from '@ag-ui/client';
+import { AzureOpenAI } from 'openai';
 import { NextRequest } from 'next/server';
 
 const apiKey = process.env["AZURE_OPENAI_API_KEY"];
@@ -11,7 +12,8 @@ const resource = process.env["AZURE_OPENAI_RESOURCE"];
 const endpoint = process.env["AZURE_OPENAI_ENDPOINT"];
 const deployment = process.env["AZURE_OPENAI_DEPLOYMENT"];
 const apiVersion = process.env["AZURE_OPENAI_API_VERSION"] || "2024-04-01-preview";
-const remoteEndpoint = process.env["COPILOTKIT_REMOTE_ENDPOINT"] || "http://localhost:8000/copilotkit_remote";
+// const remoteActionsEndpoint = process.env["COPILOTKIT_REMOTE_ENDPOINT"] || "http://localhost:8000/copilotkit_remote";
+const agentFrameworkEndpoint = process.env["AGENT_FRAMEWORK_ENDPOINT"] || "http://localhost:8000/agent-framework";
 
 if (!apiKey) throw new Error("The AZURE_OPENAI_API_KEY environment variable is missing or empty.");
 if (!resource) throw new Error("The AZURE_OPENAI_RESOURCE environment variable is missing or empty.");
@@ -29,10 +31,20 @@ const serviceAdapter = new OpenAIAdapter({
     model: deployment,
 });
 
+const careNavigationWorkflowAgent = new HttpAgent({
+    agentId: "care-navigation-workflow",
+    description: "Routes medical queries through the server-side triage workflow.",
+    url: agentFrameworkEndpoint,
+});
+    
 const runtime = new CopilotRuntime({
-    remoteEndpoints: [
-        { url: remoteEndpoint },
-    ],onError: (error) => {
+    // remoteEndpoints: [
+    //     { url: remoteActionsEndpoint },
+    // ],
+    agents: {
+        "care-navigation-workflow": careNavigationWorkflowAgent,
+    },
+    onError: (error) => {
         console.error("Copilot Runtime Error:", error);
     }
 });
