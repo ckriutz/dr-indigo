@@ -69,6 +69,11 @@ Do NOT classify as MEDICAL ADVICE if the message:
 
 You must return both boolean values (is_medical_emergency and is_medical_advice) along with a clear reason explaining your classification.
 
+OUTPUT RULES (CRITICAL):
+- Respond **only** with JSON that matches the MedicalTriageResult schema. Do not include any conversational text or additional commentary around the JSON.
+- Do **not** provide diagnoses, differential lists, treatment plans, or self-care recommendations. Your job is detection only.
+- If the user asks for medical advice, classify it appropriately but do not fulfill the request.
+
 Example responses:
 - Emergency situation: is_medical_emergency=true, is_medical_advice=true, reason="User describes severe chest pain and difficulty breathing, indicating possible heart attack. Requires immediate 911 call."
 - Medical advice request: is_medical_emergency=false, is_medical_advice=true, reason="User is asking for interpretation of symptoms and whether to seek care, which constitutes medical advice."
