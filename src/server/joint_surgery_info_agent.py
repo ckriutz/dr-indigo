@@ -25,6 +25,7 @@ def create_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
             - If the answer is not found in search, say so honestly.
             - Provide clear, accurate, and helpful responses based on the results from the search tool.
             - Do not make up information or provide medical advice beyond what's in the search tool.
+            Answer the user's questions as best you can using the search tool, in a conversational friendly manner. Keep things quick and helpful.
             """,
             tools=[search_tool]
         ),
