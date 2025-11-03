@@ -23,10 +23,21 @@ try:
     from langfuse import Langfuse
     import httpx
 
-    os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
-
-    # Create httpx client with custom SSL certificate for Langfuse
-    httpx_client = httpx.Client(verify="novant_ssl.cer")
+    # Check if certificate file exists, otherwise use default SSL verification
+    cert_path = os.path.join(os.path.dirname(__file__), "novant_ssl.cer")
+    
+    if os.path.exists(cert_path):
+        print(f"✅ Using custom SSL certificate: {cert_path}")
+        os.environ["REQUESTS_CA_BUNDLE"] = cert_path
+        httpx_client = httpx.Client(verify=cert_path)
+    else:
+        print(f"⚠️  Certificate file {cert_path} not found.")
+        # You can choose one of these options:
+        # Option A: Use default SSL verification (recommended for production)
+        httpx_client = httpx.Client()  # Uses default CA bundle
+        # Option B: Disable SSL verification (only for development)
+        # httpx_client = httpx.Client(verify=False)
+        print("Using default SSL verification.")
 
     # Initialize Langfuse with custom SSL configuration
     langfuse = Langfuse(
@@ -103,7 +114,7 @@ def condition_medical_guidance(message: Any) -> bool:
 @executor(id="reply_emergency")
 async def handle_emergency(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
     print("Handling emergency response:", response)
-    await ctx.yield_output(f"Yo, you should call 911 or go to the emergency room!")
+    await ctx.yield_output(f"If you're experiencing a medical emergency, you should call 911 or go to the emergency room!")
 
 # So this is just a simple handler that replies with medical guidance instructions.
 # No LLM needed, and whatever we put in here is what the workflow will output.
@@ -118,9 +129,9 @@ workflow = (
     .set_start_executor(med_triage_agent_executor)
     # Start by short circuiting medical emergencies and medical advice.
     .add_edge(med_triage_agent_executor, handle_emergency, condition=lambda msg: condition_medical_emergency(msg))
-    .add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
+    #.add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
     # So for this edge, it's not a medical emergency, or medical guidance, and we can move it to the joint surgery agent.
-    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
+    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_emergency(msg))
     .build()
 )
 
