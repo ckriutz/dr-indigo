@@ -1,24 +1,11 @@
 import asyncio
 import json
-import os
 import textwrap
-from typing import Any, Never
-import dotenv
-from pydantic import BaseModel
-from agent_framework.azure import AzureOpenAIChatClient
-from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
-from medical_triage_agent import create_executor_agent as create_triage_executor_agent
-from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
-from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
 
 from agent_framework import (
     AgentExecutorRequest,
-    AgentExecutorResponse,
     ChatMessage,
     Role,
-    WorkflowBuilder,
-    WorkflowContext,
-    executor,
     # Event types used for debugging output
     AgentRunEvent,
     AgentRunUpdateEvent,
@@ -30,81 +17,85 @@ from agent_framework import (
     ExecutorInvokedEvent,
     ExecutorCompletedEvent,
 )
+from openai import BaseModel
 
-# Configuration
-dotenv.load_dotenv()
-api_key =  os.environ.get("AZURE_OPENAI_API_KEY")
-endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
-
-chat_client = AzureOpenAIChatClient(
-    api_key=api_key,
-    endpoint=endpoint,
-    deployment_name=deployment,
-)
-
-# Create agents
-med_triage_agent_executor = create_triage_executor_agent(chat_client)
-med_triage_agent = create_triage_agent(chat_client)
-joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
-
-# Lets make sure the json returned is valid, and route based on the boolean value.
-def condition_medical_emergency(message: Any) -> bool:
-    # Defensive guard. If a non AgentExecutorResponse appears, let the edge pass to avoid dead ends.
-    if not isinstance(message, AgentExecutorResponse):
-        return True
-    try:
-        # Using model_validate_json ensures type safety and raises if the shape is wrong.
-        detection = MedicalTriageResult.model_validate_json(message.agent_run_response.text)
-        return detection.is_medical_emergency
-    except Exception:
-        # Fail closed on parse errors so we do not accidentally route to the wrong path.
-        # Returning False prevents this edge from activating.
-        return False
+from workflow import create_workflow
 
 
-# Lets make sure the json returned is valid, and route based on the boolean value.
-def condition_medical_guidance(message: Any) -> bool:
-    # Defensive guard. If a non AgentExecutorResponse appears, let the edge pass to avoid dead ends.
-    if not isinstance(message, AgentExecutorResponse):
-        return True
-    try:
-        # Using model_validate_json ensures type safety and raises if the shape is wrong.
-        detection = MedicalTriageResult.model_validate_json(message.agent_run_response.text)
-        return detection.is_medical_advice
-    except Exception:
-        # Fail closed on parse errors so we do not accidentally route to the wrong path.
-        # Returning False prevents this edge from activating.
-        return False
+async def main() -> None:
+    workflow = create_workflow()
+    conversation: list[ChatMessage] = []
 
-# So this is just a simple handler that replies with emergency instructions.
-# No LLM needed.
-@executor(id="reply_emergency")
-async def handle_emergency(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
-    # Downstream of the email assistant. Parse a validated EmailResponse and yield the workflow output.
-    await ctx.yield_output(f"Yo, you should call 911 or go to the emergency room!")
+    print("Interactive medical triage chat ready. Type 'exit' to quit.")
 
-# So this is just a simple handler that replies with emergency instructions.
-# No LLM needed.
-@executor(id="reply_medical_guidance")
-async def handle_medical_guidance(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
-    # Downstream of the email assistant. Parse a validated EmailResponse and yield the workflow output.
-    await ctx.yield_output(f"Sadly, I can't help with giving medical advice. Please consult a healthcare professional for guidance.")
+    while True:
+        try:
+            user_input = await asyncio.to_thread(input, "You: ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting chat.")
+            break
 
-workflow = (
-    WorkflowBuilder()
-    .set_start_executor(med_triage_agent_executor)
-    # Start by short circuiting medical emergencies and medical advice.
-    .add_edge(med_triage_agent_executor, handle_emergency, condition=lambda msg: condition_medical_emergency(msg))
-    .add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
-    # So for this edge, it's not a medical emergency, or medical guidance, and we can move it to the joint surgery agent.
-    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
-    .build()
-)
+        message = user_input.strip()
+        if not message:
+            continue
+
+        if message.lower() in {"exit", "quit"}:
+            print("Goodbye!")
+            break
+
+        conversation.append(ChatMessage(Role.USER, text=message))
+
+        request = AgentExecutorRequest(messages=conversation, should_respond=True)
+
+        try:
+            events = await workflow.run(request)
+        except Exception as exc:
+            print(f"Workflow error: {exc}")
+            conversation.pop()
+            continue
+
+        if events:
+            print("Workflow events:")
+            for index, event in enumerate(events):
+                _pretty_print_event(index, event)
+
+        outputs = events.get_outputs() if events else []
+        response_text: str | None = None
+
+        if outputs:
+            response_text = str(outputs[-1])
+        else:
+            for event in reversed(events or []):
+                if isinstance(event, AgentRunEvent):
+                    agent_response = getattr(event, "data", None)
+                    if agent_response is None:
+                        continue
+
+                    text_value = getattr(agent_response, "text", None)
+                    if text_value:
+                        response_text = str(text_value)
+                        break
+
+                    messages = getattr(agent_response, "messages", None)
+                    if messages:
+                        for msg in reversed(messages):
+                            msg_text = getattr(msg, "text", None)
+                            if msg_text:
+                                response_text = str(msg_text)
+                                break
+                    if response_text:
+                        break
+
+        if response_text:
+            print(f"Agent: {response_text}")
+            conversation.append(ChatMessage(Role.ASSISTANT, text=response_text))
+        else:
+            print("Agent produced no output.")
 
 
-def pretty_print_event(index: int, event: object) -> None:
+def _pretty_print_event(index: int, event: object) -> None:
     """Print a structured, emoji-annotated representation of workflow events for debugging."""
+
     def _wrap(text: str, indent: int = 6) -> None:
         for line in textwrap.wrap(text, width=120):
             print(" " * indent + line)
@@ -145,7 +136,9 @@ def pretty_print_event(index: int, event: object) -> None:
 
     # Request for external info
     if isinstance(event, RequestInfoEvent):
-        print(f"{prefix} 🔔 RequestInfo (id={event.request_id}, source={event.source_executor_id}):")
+        print(
+            f"{prefix} 🔔 RequestInfo (id={event.request_id}, source={event.source_executor_id}):"
+        )
         _wrap(str(event.data))
         return
 
@@ -174,26 +167,6 @@ def pretty_print_event(index: int, event: object) -> None:
     # Fallback
     print(f"{prefix} {event}")
 
-async def main():
-    question = "I'm currently on fire and having a hard time breathing."
-    print("Asking question:", question)
-
-    request = AgentExecutorRequest(messages=[ChatMessage(Role.USER, text=question)], should_respond=True)
-    events = await workflow.run(request)
-
-    # Print all events for debugging so we can see agent run events even if they are not
-    # produced as WorkflowOutputEvent instances. This uses emojis for agent events.
-
-    print("Workflow events:")
-    for i, ev in enumerate(events):
-        pretty_print_event(i, ev)
-
-    outputs = events.get_outputs()
-    if outputs:
-        #print("Workflow outputs:")
-        #for idx, out in enumerate(outputs):
-            #print(f"  Output {idx}: {out}")
-        print(f"Final output: {outputs[-1]}")
 
 if __name__ == "__main__":
     asyncio.run(main())
