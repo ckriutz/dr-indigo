@@ -15,6 +15,7 @@ import requests
 import dotenv
 from openai import AzureOpenAI
 import concurrent.futures
+import time
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -42,7 +43,7 @@ def load_csv_dataset(csv_path: str) -> List[Dict[str, str]]:
             })
     return dataset
 
-def query_agent(question: str) -> str:
+def query_agent(question: str) -> Tuple[str, float]:
     """
     Query the Dr. Indigo agent via HTTP using the /ask endpoint.
     
@@ -50,7 +51,7 @@ def query_agent(question: str) -> str:
         question: The user's question
         
     Returns:
-        The agent's response as a string
+        Tuple of (agent response, response time in seconds)
     """
     try:
         # Call the simple REST endpoint
@@ -60,23 +61,28 @@ def query_agent(question: str) -> str:
             "question": question
         }
         
+        start_time = time.time()
         response = requests.post(url, json=payload, timeout=120)
+        response_time = time.time() - start_time
+        
         response.raise_for_status()
         
         data = response.json()
         
         # The response should contain the result from the action
         if isinstance(data, dict) and "response" in data:
-            return data["response"]
+            return data["response"], response_time
         elif isinstance(data, dict) and "error" in data:
-            return f"Error from server: {data['error']}"
+            return f"Error from server: {data['error']}", response_time
         else:
-            return json.dumps(data, indent=2)
+            return json.dumps(data, indent=2), response_time
         
     except requests.exceptions.RequestException as e:
-        return f"Error: {str(e)}"
+        response_time = time.time() - start_time if 'start_time' in locals() else 0
+        return f"Error: {str(e)}", response_time
     except Exception as e:
-        return f"Error: {str(e)}"
+        response_time = time.time() - start_time if 'start_time' in locals() else 0
+        return f"Error: {str(e)}", response_time
 
 def compare_with_llm(input_text: str, response: str, expected_output: str, llm_client: AzureOpenAI) -> Tuple[int, str]:
     """
@@ -158,8 +164,8 @@ def process_single_item(item: Dict[str, str], item_number: int, llm_client: Azur
     input_text = item['input']
     expected_output = item['expected_output']
     
-    # Query the agent
-    response = query_agent(input_text)
+    # Query the agent and track response time
+    response, response_time = query_agent(input_text)
     
     # Compare with expected output
     score, explanation = compare_with_llm(input_text, response, expected_output, llm_client)
@@ -169,6 +175,7 @@ def process_single_item(item: Dict[str, str], item_number: int, llm_client: Azur
         'input': input_text,
         'expected_output': expected_output,
         'agent_response': response,
+        'response_time': round(response_time, 3),
         'score': score,
         'pass': score == 1,
         'explanation': explanation
@@ -237,6 +244,7 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
                     'input': dataset[idx]['input'],
                     'expected_output': dataset[idx]['expected_output'],
                     'agent_response': f'Error: {exc}',
+                    'response_time': 0,
                     'score': 0,
                     'pass': False,
                     'explanation': f'Exception occurred: {exc}'
@@ -245,14 +253,18 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
     # Sort results by item number to maintain order
     results.sort(key=lambda x: x['item_number'])
     
-    # Extract scores for metrics
+    # Extract scores and response times for metrics
     scores = [r['score'] for r in results]
+    response_times = [r['response_time'] for r in results]
     
     # Calculate overall metrics
     total_items = len(scores)
     passed_items = sum(scores)
     failed_items = total_items - passed_items
     pass_rate = (passed_items / total_items * 100) if total_items > 0 else 0
+    avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+    min_response_time = min(response_times) if response_times else 0
+    max_response_time = max(response_times) if response_times else 0
     
     evaluation_results = {
         'timestamp': datetime.now().isoformat(),
@@ -261,6 +273,9 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
         'passed': passed_items,
         'failed': failed_items,
         'pass_rate': round(pass_rate, 2),
+        'avg_response_time': round(avg_response_time, 3),
+        'min_response_time': round(min_response_time, 3),
+        'max_response_time': round(max_response_time, 3),
         'results': results
     }
     
@@ -283,6 +298,10 @@ def print_results_summary(evaluation_results: Dict):
     print(f"Passed: {evaluation_results['passed']}")
     print(f"Failed: {evaluation_results['failed']}")
     print(f"Pass Rate: {evaluation_results['pass_rate']}%")
+    print("-" * 80)
+    print(f"Average Response Time: {evaluation_results['avg_response_time']:.3f}s")
+    print(f"Min Response Time: {evaluation_results['min_response_time']:.3f}s")
+    print(f"Max Response Time: {evaluation_results['max_response_time']:.3f}s")
     print("=" * 80)
     
     # Print failed items if any
@@ -291,7 +310,7 @@ def print_results_summary(evaluation_results: Dict):
         print("\nFAILED ITEMS:")
         print("-" * 80)
         for result in failed_results:
-            print(f"\nItem #{result['item_number']}")
+            print(f"\nItem #{result['item_number']} (Response time: {result['response_time']:.3f}s)")
             print(f"Input: {result['input']}")
             print(f"Expected: {result['expected_output'][:100]}...")
             print(f"Agent Response: {result['agent_response'][:100]}...")
@@ -326,7 +345,7 @@ def main():
     parser.add_argument(
         "--max_workers",
         type=int,
-        default=5,
+        default=1,
         help="Maximum number of parallel workers (default: 5)"
     )
     
