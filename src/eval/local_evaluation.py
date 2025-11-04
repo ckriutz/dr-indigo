@@ -22,6 +22,7 @@ dotenv.load_dotenv()
 
 # Server configuration
 SERVER_URL = os.getenv("AGENT_SERVER_URL", "http://localhost:8000")
+ENDPOINT = "/ask"  # Default endpoint (direct to joint surgery agent)
 
 def load_csv_dataset(csv_path: str) -> List[Dict[str, str]]:
     """
@@ -43,19 +44,23 @@ def load_csv_dataset(csv_path: str) -> List[Dict[str, str]]:
             })
     return dataset
 
-def query_agent(question: str) -> Tuple[str, float]:
+def query_agent(question: str, endpoint: str = None) -> Tuple[str, float]:
     """
-    Query the Dr. Indigo agent via HTTP using the /ask endpoint.
+    Query the Dr. Indigo agent via HTTP using the specified endpoint.
     
     Args:
         question: The user's question
+        endpoint: API endpoint to use (e.g., "/ask" or "/ask_workflow")
         
     Returns:
         Tuple of (agent response, response time in seconds)
     """
+    if endpoint is None:
+        endpoint = ENDPOINT
+        
     try:
-        # Call the simple REST endpoint
-        url = f"{SERVER_URL}/ask"
+        # Call the REST endpoint
+        url = f"{SERVER_URL}{endpoint}"
         
         payload = {
             "question": question
@@ -79,10 +84,14 @@ def query_agent(question: str) -> Tuple[str, float]:
         
     except requests.exceptions.RequestException as e:
         response_time = time.time() - start_time if 'start_time' in locals() else 0
-        return f"Error: {str(e)}", response_time
+        error_msg = f"Request Error: {type(e).__name__}: {str(e)}"
+        if hasattr(e, 'response') and e.response is not None:
+            error_msg += f"\nResponse status: {e.response.status_code}"
+            error_msg += f"\nResponse content: {e.response.text[:500]}"
+        return error_msg, response_time
     except Exception as e:
         response_time = time.time() - start_time if 'start_time' in locals() else 0
-        return f"Error: {str(e)}", response_time
+        return f"Unexpected Error: {type(e).__name__}: {str(e)}", response_time
 
 def compare_with_llm(input_text: str, response: str, expected_output: str, llm_client: AzureOpenAI) -> Tuple[int, str]:
     """
@@ -148,7 +157,7 @@ Evaluation:
         print(f"Error during LLM comparison: {e}")
         return 0, f"Error: {str(e)}"
 
-def process_single_item(item: Dict[str, str], item_number: int, llm_client: AzureOpenAI) -> Dict:
+def process_single_item(item: Dict[str, str], item_number: int, llm_client: AzureOpenAI, endpoint: str) -> Dict:
     """
     Process a single evaluation item (query agent and compare with expected output).
     
@@ -156,6 +165,7 @@ def process_single_item(item: Dict[str, str], item_number: int, llm_client: Azur
         item: Dictionary with 'input' and 'expected_output' keys
         item_number: The item number (1-indexed)
         llm_client: Azure OpenAI client for evaluation
+        endpoint: API endpoint to use for querying
         
     Returns:
         Dictionary with evaluation result
@@ -164,7 +174,7 @@ def process_single_item(item: Dict[str, str], item_number: int, llm_client: Azur
     expected_output = item['expected_output']
     
     # Query the agent and track response time
-    response, response_time = query_agent(input_text)
+    response, response_time = query_agent(input_text, endpoint)
     
     # Compare with expected output
     score, explanation = compare_with_llm(input_text, response, expected_output, llm_client)
@@ -180,7 +190,7 @@ def process_single_item(item: Dict[str, str], item_number: int, llm_client: Azur
         'explanation': explanation
     }
 
-def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, max_workers: int = 5) -> Dict:
+def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, max_workers: int = 5, endpoint: str = None) -> Dict:
     """
     Run the evaluation on the dataset in parallel.
     
@@ -189,10 +199,14 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
         output_path: Optional path to save results JSON file
         n_items: Optional limit on number of items to evaluate
         max_workers: Maximum number of parallel workers (default: 5)
+        endpoint: API endpoint to use (default: /ask, or use /ask_workflow for full workflow)
         
     Returns:
         Dictionary with evaluation results
     """
+    if endpoint is None:
+        endpoint = ENDPOINT
+        
     # Load dataset
     print(f"Loading dataset from {csv_path}...")
     dataset = load_csv_dataset(csv_path)
@@ -201,15 +215,16 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
         dataset = dataset[:n_items]
     
     print(f"Loaded {len(dataset)} items")
+    print(f"Using endpoint: {endpoint}")
     
     # Initialize Azure OpenAI client for evaluation
     api_key = os.environ.get("AZURE_OPENAI_API_KEY")
-    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
     
     llm_client = AzureOpenAI(
         api_key=api_key,
-        azure_endpoint=endpoint,
+        azure_endpoint=azure_endpoint,
         api_version=api_version
     )
     
@@ -221,7 +236,7 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all items to the executor
         futures = {
-            executor.submit(process_single_item, item, idx + 1, llm_client): idx 
+            executor.submit(process_single_item, item, idx + 1, llm_client, endpoint): idx 
             for idx, item in enumerate(dataset)
         }
         
@@ -268,6 +283,7 @@ def run_evaluation(csv_path: str, output_path: str = None, n_items: int = None, 
     evaluation_results = {
         'timestamp': datetime.now().isoformat(),
         'dataset_path': csv_path,
+        'endpoint': endpoint,
         'total_items': total_items,
         'passed': passed_items,
         'failed': failed_items,
@@ -293,6 +309,7 @@ def print_results_summary(evaluation_results: Dict):
     print("=" * 80)
     print(f"Timestamp: {evaluation_results['timestamp']}")
     print(f"Dataset: {evaluation_results['dataset_path']}")
+    print(f"Endpoint: {evaluation_results['endpoint']}")
     print(f"Total Items: {evaluation_results['total_items']}")
     print(f"Passed: {evaluation_results['passed']}")
     print(f"Failed: {evaluation_results['failed']}")
@@ -347,6 +364,13 @@ def main():
         default=1,
         help="Maximum number of parallel workers (default: 5)"
     )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        default="/ask",
+        choices=["/ask", "/ask_workflow"],
+        help="API endpoint to use: /ask (direct to agent) or /ask_workflow (full workflow with triage)"
+    )
     
     args = parser.parse_args()
     
@@ -383,7 +407,7 @@ def main():
     
     # Run evaluation
     try:
-        evaluation_results = run_evaluation(csv_path, output_path, args.n_items, args.max_workers)
+        evaluation_results = run_evaluation(csv_path, output_path, args.n_items, args.max_workers, args.endpoint)
         print_results_summary(evaluation_results)
         
         # Exit with error code if any items failed

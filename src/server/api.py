@@ -25,6 +25,14 @@ try:
     from langfuse import Langfuse
     import httpx
 
+    # raise error if SSL cert is missing
+    if not os.path.exists("novant_ssl.cer"):
+        raise FileNotFoundError("SSL certificate 'novant_ssl.cer' not found in the current directory.")
+    
+    # raise error if LANGFUSE_SECRET_KEY is missing
+    if not os.environ.get("LANGFUSE_SECRET_KEY"):
+        raise EnvironmentError("LANGFUSE_SECRET_KEY environment variable is not set.")
+    
     os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
 
     # Create httpx client with custom SSL certificate for Langfuse
@@ -51,7 +59,7 @@ try:
     except Exception as e:
         print(f"⚠️  Langfuse auth check error: {e}")
     
-except ImportError as e:
+except Exception as e:
     print(f"⚠️  setup_observability not available. Error: {e}")
     print("⚠️  Continuing without observability setup.")
     langfuse = None
@@ -211,6 +219,55 @@ async def ask_question(request: dict):
             return {"response": response}
         else:
             return {"response": str(response)}
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@app.post("/ask_workflow")
+async def ask_question_workflow(request: dict):
+    """
+    REST endpoint that uses the full workflow including triage agent.
+    Routes through medical emergency detection and medical advice filtering.
+    
+    Example:
+        POST /ask_workflow
+        {"question": "I'm in pain, what should I do?"}
+    """
+    question = request.get("question", "")
+    if not question:
+        return {"error": "No question provided"}
+    
+    try:
+        # Create a request for the workflow
+        workflow_request = AgentExecutorRequest(
+            messages=[ChatMessage(Role.USER, text=question)],
+            should_respond=True
+        )
+        
+        # Run through the full workflow
+        events = await workflow.run(workflow_request)
+        outputs = events.get_outputs()
+        
+        # Extract the final response
+        if outputs and len(outputs) > 0:
+            output = outputs[-1]
+            
+            # Handle different output types
+            if isinstance(output, str):
+                response_text = output
+            elif hasattr(output, 'text'):
+                response_text = output.text
+            elif hasattr(output, 'agent_run_response') and output.agent_run_response:
+                response_text = output.agent_run_response.text
+            else:
+                # Fallback to string representation
+                response_text = str(output)
+            
+            return {"response": response_text}
+        else:
+            return {"response": "No response from workflow"}
             
     except Exception as e:
         import traceback
