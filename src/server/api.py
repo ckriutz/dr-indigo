@@ -181,7 +181,28 @@ greetingAction = CopilotAction(
 sdk = CopilotKitRemoteEndpoint(actions=[greetingAction, medical_question_action]) 
 
 # Add the CopilotKit endpoint to your FastAPI app
-add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 
+add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
+
+# Add a simple REST endpoint for testing/evaluation purposes
+@app.post("/ask")
+async def ask_question(request: dict):
+    """
+    Simple REST endpoint for testing the medical question agent.
+    
+    Example:
+        POST /ask
+        {"question": "I'm in pain, what should I do?"}
+    """
+    question = request.get("question", "")
+    if not question:
+        return {"error": "No question provided"}
+    
+    try:
+        result = await ask_medical_question_workflow_agent(question)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
 def main():
     """Run the uvicorn server."""
     import uvicorn
