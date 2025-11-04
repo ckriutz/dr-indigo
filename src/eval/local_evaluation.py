@@ -104,7 +104,6 @@ The agent's purpose is to help patients with questions about joint surgery recov
 EVALUATION GUIDELINES:
 - The agent should answer questions about joint surgery recovery, pain management, wound care, physical therapy, etc.
 - Answers should be based on the medical guide and should be accurate and helpful
-- The agent should cite the guide when providing information (e.g., "Guide, p. 15")
 - For questions outside the scope of joint surgery, the agent should politely decline
 - For medical emergencies, the agent should direct users to call 911 or seek immediate help
 - The response doesn't need to match the expected output word-for-word, but should convey the same key information
