@@ -187,7 +187,8 @@ add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
 @app.post("/ask")
 async def ask_question(request: dict):
     """
-    Simple REST endpoint for testing the medical question agent.
+    Simple REST endpoint for directly querying the joint surgery info agent.
+    Bypasses the triage workflow and goes straight to the joint surgery agent.
     
     Example:
         POST /ask
@@ -198,9 +199,22 @@ async def ask_question(request: dict):
         return {"error": "No question provided"}
     
     try:
-        result = await ask_medical_question_workflow_agent(question)
-        return result
+        # Create the joint surgery agent
+        joint_surgery_agent = create_joint_surgery_agent(chat_client)
+        # Use the ChatAgent directly with a simple run
+        response = await joint_surgery_agent.run(question)
+        
+        # Extract the response text
+        if response and hasattr(response, 'text'):
+            return {"response": response.text}
+        elif isinstance(response, str):
+            return {"response": response}
+        else:
+            return {"response": str(response)}
+            
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"error": str(e)}
 
 def main():
