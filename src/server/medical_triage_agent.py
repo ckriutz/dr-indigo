@@ -97,13 +97,3 @@ def create_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
         id="medical_triage_agent_executor",
     )
     return agent
-
-def create_agent(client: AzureOpenAIChatClient):
-    agent = ChatAgent(
-        chat_client=client,
-        name="MedicalTriageAgent",
-        instructions=MEDICAL_TRIAGE_INSTRUCTIONS,
-        response_format=MedicalTriageResult,
-    )
-
-    return agent

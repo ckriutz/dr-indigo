@@ -1,4 +1,5 @@
 import os
+import uuid
 from typing import Any, Never
 
 from agent_framework import AgentExecutorRequest, AgentExecutorResponse, ChatMessage, Role, WorkflowBuilder, WorkflowContext, executor
@@ -9,13 +10,60 @@ from agent_framework.azure import AzureOpenAIChatClient
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 
-from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
-from medical_triage_agent import create_executor_agent as create_triage_executor_agent
-from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
+from medical_triage_agent import create_executor_agent as create_triage_executor_agent, MedicalTriageResult
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
 
 # Load environment variables
 dotenv.load_dotenv()
+
+# Setup Langfuse observability
+try:
+    from agent_framework.observability import setup_observability
+    from langfuse import Langfuse
+    import httpx
+
+    # Check if certificate file exists, otherwise use default SSL verification
+    cert_path = os.path.join(os.path.dirname(__file__), "novant_ssl.cer")
+    
+    if os.path.exists(cert_path):
+        print(f"✅ Using custom SSL certificate: {cert_path}")
+        os.environ["REQUESTS_CA_BUNDLE"] = cert_path
+        httpx_client = httpx.Client(verify=cert_path)
+    else:
+        print(f"⚠️  Certificate file {cert_path} not found.")
+        # You can choose one of these options:
+        # Option A: Use default SSL verification (recommended for production)
+        httpx_client = httpx.Client()  # Uses default CA bundle
+        # Option B: Disable SSL verification (only for development)
+        # httpx_client = httpx.Client(verify=False)
+        print("Using default SSL verification.")
+
+    # Initialize Langfuse with custom SSL configuration
+    langfuse = Langfuse(
+        secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
+        public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
+        host=os.environ.get("LANGFUSE_HOST"),
+        httpx_client=httpx_client
+    )
+    
+    # Setup observability
+    setup_observability(enable_sensitive_data=True)
+    print("✅ Observability setup completed!")
+    
+    # Verify Langfuse connection
+    try:
+        if langfuse.auth_check():
+            print("✅ Langfuse client authenticated and ready!")
+        else:
+            print("⚠️  Langfuse authentication failed")
+    except Exception as e:
+        print(f"⚠️  Langfuse auth check error: {e}")
+    
+except ImportError as e:
+    print(f"⚠️  setup_observability not available. Error: {e}")
+    print("⚠️  Continuing without observability setup.")
+    langfuse = None
+
 api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
 deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
@@ -29,9 +77,7 @@ chat_client = AzureOpenAIChatClient(
 
 # Create agents
 med_triage_agent_executor = create_triage_executor_agent(chat_client)
-med_triage_agent = create_triage_agent(chat_client)
-joint_surgery_agent_executor = create_joint_surgery_executor_agent(chat_client)
-joint_surgery_agent = create_joint_surgery_agent(chat_client)
+joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
 
 # Lets make sure the json returned is valid, and route based on the boolean value.
 def condition_medical_emergency(message: Any) -> bool:
@@ -67,7 +113,7 @@ def condition_medical_guidance(message: Any) -> bool:
 @executor(id="reply_emergency")
 async def handle_emergency(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
     print("Handling emergency response:", response)
-    await ctx.yield_output(f"Yo, you should call 911 or go to the emergency room!")
+    await ctx.yield_output(f"If you're experiencing a medical emergency, you should call 911 or go to the emergency room!")
 
 # So this is just a simple handler that replies with medical guidance instructions.
 # No LLM needed, and whatever we put in here is what the workflow will output.
@@ -91,9 +137,7 @@ workflow = (
     .add_edge(med_triage_agent_executor, handle_emergency, condition=lambda msg: condition_medical_emergency(msg))
     .add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
     # So for this edge, it's not a medical emergency, or medical guidance, and we can move it to the joint surgery agent.
-    .add_edge(med_triage_agent_executor, joint_surgery_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
-    # Joint surgery agent needs to yield output
-    .add_edge(joint_surgery_agent, joint_surgery_with_output)
+    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
     .build()
 )
 
@@ -136,7 +180,6 @@ async def ask_medical_question_workflow_agent(question: str, thread_id: str = No
     
     # Generate thread_id if this is a new conversation
     if not thread_id:
-        import uuid
         thread_id = str(uuid.uuid4())
         print(f"Created new thread: {thread_id}")
     
@@ -198,9 +241,11 @@ sdk = CopilotKitRemoteEndpoint(actions=[getUserAction, medical_question_action])
 
 # Add the CopilotKit endpoint to your FastAPI app
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 
+
 def main():
     """Run the uvicorn server."""
     import uvicorn
     uvicorn.run("api:app", host="localhost", port=8000, reload=True)
+
 if __name__ == "__main__":
     main()
