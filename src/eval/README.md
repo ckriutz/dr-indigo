@@ -345,13 +345,6 @@ The script displays:
    - Dataset run for the full experiment
 5. **Display Summary**: Shows key metrics in console and Langfuse link
 
-### Comparing Experiments
-
-In Langfuse UI, you can:
-- Compare different experiment runs on the same dataset
-- Track improvements over time
-- Identify problematic questions
-- Analyze response patterns
 
 ### Troubleshooting
 
@@ -363,19 +356,3 @@ In Langfuse UI, you can:
 **"Langfuse authentication failed"**
 - Verify `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_HOST` in `.env`
 - Check SSL certificate (`novant_ssl.cer`) is in the eval directory
-
-**"Error querying agent"**
-- Same as local evaluation troubleshooting
-- Ensure the agent server is running
-- Check server logs for errors
-
-### Advantages over Local Evaluation
-
-- **Centralized Storage**: Results stored in Langfuse, accessible to team
-- **Experiment Tracking**: Compare runs over time
-- **Dataset Management**: Datasets managed in Langfuse, not CSV files
-- **Automatic Tracing**: Full observability of each execution
-- **Team Collaboration**: Share results and insights with team
-- **Production Ready**: Suitable for continuous evaluation pipelines
-
-````
