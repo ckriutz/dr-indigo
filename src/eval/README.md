@@ -6,7 +6,6 @@ This directory contains evaluation scripts for testing the Dr. Indigo medical as
 
 - `local_evaluation.py` - **Local evaluation script** that queries the running agent server via HTTP and saves results to JSON
 - `langfuse_evaluation.py` - **Langfuse evaluation script** that pulls datasets from Langfuse and records experiment results
-- `quick_test.py` - Simple test script to verify the agent is working (no LLM evaluation)
 - `questions_answers.csv` - Local dataset of test questions and expected answers (for local_evaluation.py)
 - `requirements.txt` - Additional Python dependencies needed for evaluation
 - `.env` - Environment variables (Azure OpenAI, Langfuse credentials)
@@ -46,20 +45,6 @@ The `local_evaluation.py` script queries the running agent server via HTTP using
    AZURE_OPENAI_DEPLOYMENT=your_deployment
    AZURE_OPENAI_API_VERSION=2024-02-15-preview
    ```
-
-### Quick Test
-
-Before running the full evaluation, verify the agent is working:
-
-```bash
-# Test with direct endpoint (bypasses triage)
-python quick_test.py
-
-# Test with full workflow endpoint (includes triage)
-python quick_test.py --endpoint /ask_workflow
-```
-
-This tests the agent with 3 sample questions without LLM evaluation.
 
 ### Usage
 
