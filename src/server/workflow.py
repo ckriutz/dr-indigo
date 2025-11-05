@@ -1,32 +1,104 @@
 import os
 from typing import Any, Never
+
 import dotenv
-from agent_framework.azure import AzureOpenAIChatClient
-from agents.medical_triage_agent import MedicalTriageResult
-from agents.medical_triage_agent import (
-    create_executor_agent as create_triage_executor_agent,
-)
-from agents.joint_surgery_info_agent import (
-    create_agent_executor as create_joint_surgery_executor_agent,
-)
 
 from agent_framework import (
+    AgentExecutorRequest,
     AgentExecutorResponse,
     Workflow,
     WorkflowBuilder,
     WorkflowContext,
     executor,
 )
+from agent_framework.azure import AzureOpenAIChatClient
+
+from agents.care_navigator_agent import (
+    create_care_navigator_executor,
+)
+from agents.medical_triage_agent import MedicalTriageResult
+from agents.medical_triage_agent import (
+    create_executor_agent as create_triage_executor_agent,
+)
 
 
-# So this is just a simple handler that replies with emergency instructions.
-# No LLM needed.
+_CLIENT_CACHE: dict[tuple[str | None, str | None, str | None], AzureOpenAIChatClient] = {}
+
+
+_TRIAGE_EXECUTOR_ID = "medical_triage_agent_executor"
+_CARE_NAV_EXECUTOR_ID = "care_navigator_agent_executor"
+
+
+def _get_chat_client(
+    api_key: str | None,
+    endpoint: str | None,
+    deployment: str | None,
+) -> AzureOpenAIChatClient:
+    cache_key = (api_key, endpoint, deployment)
+    client = _CLIENT_CACHE.get(cache_key)
+    if client is None:
+        client = AzureOpenAIChatClient(
+            api_key=api_key,
+            endpoint=endpoint,
+            deployment_name=deployment,
+        )
+        _CLIENT_CACHE[cache_key] = client
+    return client
+
+
+@executor(id="entry_dispatcher")
+async def _entry_dispatcher(
+    request: AgentExecutorRequest, ctx: WorkflowContext[AgentExecutorRequest]
+) -> None:
+    """Forward the patient request to downstream agents."""
+    await ctx.send_message(request)
+
+
 @executor(id="reply_emergency")
 async def _handle_emergency(
     response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]
 ) -> None:
-    # Downstream of the email assistant. Parse a validated EmailResponse and yield the workflow output.
+    """Short-circuit emergencies with an explicit safety message."""
     await ctx.yield_output("Yo, you should call 911 or go to the emergency room!")
+
+
+@executor(id="final_response_router")
+async def _final_response_router(
+    responses: list[AgentExecutorResponse], ctx: WorkflowContext[Never, str]
+) -> None:
+    """Emit the care navigator reply when the triage agent clears the emergency check."""
+
+    triage_response: AgentExecutorResponse | None = None
+    care_nav_response: AgentExecutorResponse | None = None
+
+    for response in responses:
+        if response.executor_id == _TRIAGE_EXECUTOR_ID:
+            triage_response = response
+        elif response.executor_id == _CARE_NAV_EXECUTOR_ID:
+            care_nav_response = response
+
+    if triage_response is None or care_nav_response is None:
+        # Require both responses before deciding on the final output.
+        return
+
+    triage_result: MedicalTriageResult | None = None
+    if isinstance(triage_response.agent_run_response.value, MedicalTriageResult):
+        triage_result = triage_response.agent_run_response.value
+    else:
+        try:
+            triage_result = MedicalTriageResult.model_validate_json(
+                triage_response.agent_run_response.text
+            )
+        except Exception:
+            triage_result = None
+
+    if triage_result and triage_result.is_medical_emergency:
+        # Emergency messaging already emitted via the dedicated handler.
+        return
+
+    reply_text = care_nav_response.agent_run_response.text.strip()
+    if reply_text:
+        await ctx.yield_output(reply_text)
 
 
 # Lets make sure the json returned is valid, and route based on the boolean value.
@@ -47,41 +119,39 @@ def _condition_medical_emergency(message: Any) -> bool:
 
 
 def create_workflow() -> Workflow:
-    # Configuration
     dotenv.load_dotenv()
     api_key = os.environ.get("AZURE_OPENAI_API_KEY")
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+    # default_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
 
-    # Create agents
-    med_triage_agent_executor = create_triage_executor_agent(AzureOpenAIChatClient(
-        api_key=api_key,
-        endpoint=endpoint,
-        deployment_name="gpt-5-nano",
-    ))
-    # med_triage_agent = create_triage_agent(chat_client)
-    joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(
-        AzureOpenAIChatClient(
-        api_key=api_key,
-        endpoint=endpoint,
-        deployment_name=deployment,
+    # triage_deployment = os.environ.get("AZURE_OPENAI_TRIAGE_DEPLOYMENT", "gpt-5-nano")
+    # care_nav_deployment = os.environ.get(
+    #     "AZURE_OPENAI_CARE_NAV_DEPLOYMENT", default_deployment
+    # )
+
+    med_triage_agent_executor = create_triage_executor_agent(
+        _get_chat_client(api_key, endpoint, "gpt-5-mini")
     )
+
+    care_navigator_executor = create_care_navigator_executor(
+        _get_chat_client(api_key, endpoint, "gpt-5-chat")
     )
 
     return (
         WorkflowBuilder()
-        .set_start_executor(med_triage_agent_executor)
-        # Start by short circuiting medical emergencies.
+        .set_start_executor(_entry_dispatcher)
+        .add_fan_out_edges(
+            _entry_dispatcher,
+            [med_triage_agent_executor, care_navigator_executor],
+        )
         .add_edge(
             med_triage_agent_executor,
             _handle_emergency,
             condition=_condition_medical_emergency,
         )
-        # For non-emergencies, forward to the joint surgery agent.
-        .add_edge(
-            med_triage_agent_executor,
-            joint_surgery_agent_executor_agent,
-            condition=lambda msg: not _condition_medical_emergency(msg),
+        .add_fan_in_edges(
+            [med_triage_agent_executor, care_navigator_executor],
+            _final_response_router,
         )
         .build()
     )

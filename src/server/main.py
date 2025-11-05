@@ -1,6 +1,7 @@
 import asyncio
 import json
 import textwrap
+import time
 
 from agent_framework import (
     AgentExecutorRequest,
@@ -47,12 +48,15 @@ async def main() -> None:
 
         request = AgentExecutorRequest(messages=conversation, should_respond=True)
 
+        start_time = time.perf_counter()
         try:
             events = await workflow.run(request)
         except Exception as exc:
             print(f"Workflow error: {exc}")
             conversation.pop()
             continue
+
+        response_duration = time.perf_counter() - start_time
 
         if events:
             print("Workflow events:")
@@ -89,8 +93,10 @@ async def main() -> None:
         if response_text:
             print(f"Agent: {response_text}")
             conversation.append(ChatMessage(Role.ASSISTANT, text=response_text))
+            print(f"(Response time: {response_duration:.2f}s)")
         else:
             print("Agent produced no output.")
+            print(f"(Response time: {response_duration:.2f}s)")
 
 
 def _pretty_print_event(index: int, event: object) -> None:
