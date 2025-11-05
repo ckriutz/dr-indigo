@@ -3,7 +3,6 @@ from agent_framework.azure import AzureOpenAIChatClient
 from pydantic import BaseModel
 
 
-
 # Shared instructions used by both the ChatAgent and AgentExecutor
 MEDICAL_TRIAGE_INSTRUCTIONS = """
 You are a Medical Triage Agent. Your role is to analyze user input and determine whether the situation requires immediate emergency services (911 call).

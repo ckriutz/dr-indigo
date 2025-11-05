@@ -22,7 +22,9 @@ from agents.medical_triage_agent import (
 )
 
 
-_CLIENT_CACHE: dict[tuple[str | None, str | None, str | None], AzureOpenAIChatClient] = {}
+_CLIENT_CACHE: dict[
+    tuple[str | None, str | None, str | None], AzureOpenAIChatClient
+] = {}
 
 
 _TRIAGE_EXECUTOR_ID = "medical_triage_agent_executor"
