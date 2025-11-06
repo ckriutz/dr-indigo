@@ -1,7 +1,7 @@
 from agent_framework import AgentExecutor, ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 
-from tools.file_search import search_medical_guidance
+from tools.search_medical_guidance import search_medical_guidance
 
 # If external information is required, ask them to call the top level novant phone number - eventually contacting the care navigator directly.
 # Include 911 guidance.
@@ -34,28 +34,13 @@ Your goal is to ensure patients feel listened to and receive clear next steps de
 # Both the executor and chat agent share the same instruction set so that the
 # workflow can either call the executor directly or embed the agent elsewhere.
 def create_care_navigator_executor(client: AzureOpenAIChatClient) -> AgentExecutor:
-    agent = AgentExecutor(
+    return AgentExecutor(
         ChatAgent(
             chat_client=client,
             tools=[search_medical_guidance],
             instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
             name="CareNavigatorAgent",
         ),
-        # client.create_agent(
-        #     instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
-        #     tools=[],
-        # ),
         streaming=True,
         id="care_navigator_agent_executor",
     )
-    return agent
-
-
-# def create_care_navigator_agent(client: AzureOpenAIChatClient) -> ChatAgent:
-#     agent = ChatAgent(
-#         chat_client=client,
-#         tools=[search_medical_guidance],
-#         instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
-#         name="CareNavigatorAgent",
-#     )
-#     return agent
