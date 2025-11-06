@@ -60,7 +60,7 @@ class MedicalTriageResult(BaseModel):
     reason: str
 
 
-def create_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
+def create_triage_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
     return AgentExecutor(
         ChatAgent(
             chat_client=client,
@@ -68,6 +68,5 @@ def create_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
             instructions=MEDICAL_TRIAGE_INSTRUCTIONS,
             response_format=MedicalTriageResult,
         ),
-        streaming=True,
         id="medical_triage_agent_executor",
     )

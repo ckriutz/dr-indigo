@@ -3,10 +3,10 @@ from fastapi import FastAPI
 
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
-from telemetry import initiate_telemetry
+# from telemetry import initiate_telemetry
 from workflow import create_workflow
 
-initiate_telemetry()
+# initiate_telemetry()
 
 # Initialize FastAPI app
 app = FastAPI()

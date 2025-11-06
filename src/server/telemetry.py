@@ -1,8 +1,8 @@
 from agent_framework.observability import setup_observability
-from telemetry import Langfuse
 import httpx
 import os
 from settings import AUBREY_SETTINGS
+from langfuse import Langfuse
 
 os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
 

@@ -11,13 +11,9 @@ from agent_framework import (
 )
 from agent_framework.azure import AzureOpenAIChatClient
 
-from agents.care_navigator_agent import (
-    create_care_navigator_executor,
-)
-from agents.medical_triage_agent import MedicalTriageResult
-from agents.medical_triage_agent import (
-    create_executor_agent as create_triage_executor_agent,
-)
+from agents.care_navigator_agent import create_care_navigator_executor
+from agents.medical_triage_agent import MedicalTriageResult, create_triage_executor_agent
+
 from settings import AUBREY_SETTINGS
 
 
