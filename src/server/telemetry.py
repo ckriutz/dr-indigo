@@ -2,6 +2,7 @@ from agent_framework.observability import setup_observability
 from telemetry import Langfuse
 import httpx
 import os
+from settings import AUBREY_SETTINGS
 
 os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
 
@@ -14,9 +15,9 @@ def initiate_telemetry():
 
         # Initialize Langfuse with custom SSL configuration
         langfuse = Langfuse(
-            secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
-            public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
-            host=os.environ.get("LANGFUSE_HOST"),
+            secret_key=AUBREY_SETTINGS.langfuse_secret_key,
+            public_key=AUBREY_SETTINGS.langfuse_public_key,
+            host=AUBREY_SETTINGS.langfuse_host,
             httpx_client=httpx_client,
         )
 

@@ -22,6 +22,7 @@ from openai import BaseModel
 
 from workflow import create_workflow
 
+
 async def main() -> None:
     workflow = create_workflow()
     conversation: list[ChatMessage] = []
@@ -171,6 +172,7 @@ def _pretty_print_event(index: int, event: object) -> None:
 
     # Fallback
     print(f"{prefix} {event}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

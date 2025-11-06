@@ -1,7 +1,5 @@
-import os
 from typing import Any, Never
 
-import dotenv
 
 from agent_framework import (
     AgentExecutorRequest,
@@ -20,6 +18,7 @@ from agents.medical_triage_agent import MedicalTriageResult
 from agents.medical_triage_agent import (
     create_executor_agent as create_triage_executor_agent,
 )
+from settings import AUBREY_SETTINGS
 
 
 _CLIENT_CACHE: dict[
@@ -121,22 +120,20 @@ def _condition_medical_emergency(message: Any) -> bool:
 
 
 def create_workflow() -> Workflow:
-    dotenv.load_dotenv()
-    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
-    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-    # default_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
-
-    # triage_deployment = os.environ.get("AZURE_OPENAI_TRIAGE_DEPLOYMENT", "gpt-5-nano")
-    # care_nav_deployment = os.environ.get(
-    #     "AZURE_OPENAI_CARE_NAV_DEPLOYMENT", default_deployment
-    # )
-
     med_triage_agent_executor = create_triage_executor_agent(
-        _get_chat_client(api_key, endpoint, "gpt-5-mini")
+        _get_chat_client(
+            AUBREY_SETTINGS.azure_openai_api_key,
+            AUBREY_SETTINGS.azure_openai_endpoint,
+            AUBREY_SETTINGS.azure_openai_triage_model,
+        )
     )
 
     care_navigator_executor = create_care_navigator_executor(
-        _get_chat_client(api_key, endpoint, "gpt-5-chat")
+        _get_chat_client(
+            AUBREY_SETTINGS.azure_openai_api_key,
+            AUBREY_SETTINGS.azure_openai_endpoint,
+            AUBREY_SETTINGS.azure_openai_care_nav_model,
+        )
     )
 
     return (

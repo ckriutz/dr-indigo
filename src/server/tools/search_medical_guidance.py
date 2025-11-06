@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Annotated, Any
 
-import dotenv
 import chromadb
 from chromadb.utils import embedding_functions
 
@@ -15,12 +13,11 @@ from pathlib import Path
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+from settings import AUBREY_SETTINGS
 
-dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_EMBED_MODEL = "text-embedding-3-small"
 _DEFAULT_GUIDE_PATH = (
     Path(__file__).resolve().parent.parent
     / "data"
@@ -30,23 +27,14 @@ _METADATA_SOURCE = "Your Guide to Total Joint Replacement"
 
 
 def _load_embedding_function() -> embedding_functions.OpenAIEmbeddingFunction | None:
-    required_vars = ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT")
-    missing = [var for var in required_vars if not os.environ.get(var)]
-    if missing:
-        logger.warning(
-            "Medical guidance search disabled; missing environment variables: %s",
-            ", ".join(sorted(missing)),
-        )
-        return None
-
     try:
         return embedding_functions.OpenAIEmbeddingFunction(
-            model_name=_EMBED_MODEL,
-            deployment_id=_EMBED_MODEL,
-            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            model_name=AUBREY_SETTINGS.azure_openai_embedding_model,
+            deployment_id=AUBREY_SETTINGS.azure_openai_embedding_model,
+            api_key=AUBREY_SETTINGS.azure_openai_api_key,
             api_type="azure",
-            api_base=os.environ["AZURE_OPENAI_ENDPOINT"],
-            api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-01"),
+            api_base=AUBREY_SETTINGS.azure_openai_endpoint,
+            api_version=AUBREY_SETTINGS.azure_openai_api_version,
         )
     except Exception as exc:  # pragma: no cover - defensive logging only
         logger.warning(
@@ -214,9 +202,7 @@ class MedicalGuidanceSearch:
         for idx, text in enumerate(documents):
             metadata = metadatas[idx] if metadatas and idx < len(metadatas) else None
             distance = (
-                float(distances[idx])
-                if distances and idx < len(distances)
-                else -1.0
+                float(distances[idx]) if distances and idx < len(distances) else -1.0
             )
             matches.append(
                 GuidanceMatch(
@@ -254,9 +240,7 @@ async def search_medical_guidance(
 
     This function is a wrapper around the GuidanceSearch class instance.
     """
-    logger.info(
-        "Searching medical guidance for query='%s' with top_k=%s", query, top_k
-    )
+    logger.info("Searching medical guidance for query='%s' with top_k=%s", query, top_k)
 
     if not query.strip():
         return GuidanceSearchResult(
