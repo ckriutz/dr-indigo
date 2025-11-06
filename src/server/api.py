@@ -9,7 +9,9 @@ from agent_framework.azure import AzureOpenAIChatClient
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 
-from medical_triage_agent import create_executor_agent as create_triage_executor_agent, MedicalTriageResult
+from medical_triage_agent import create_agent as create_triage_agent, MedicalTriageResult
+from medical_triage_agent import create_executor_agent as create_triage_executor_agent
+from joint_surgery_info_agent import create_agent as create_joint_surgery_agent
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
 
 
@@ -23,21 +25,18 @@ try:
     from langfuse import Langfuse
     import httpx
 
-    # Check if certificate file exists, otherwise use default SSL verification
-    cert_path = os.path.join(os.path.dirname(__file__), "novant_ssl.cer")
+    # raise error if SSL cert is missing
+    if not os.path.exists("novant_ssl.cer"):
+        raise FileNotFoundError("SSL certificate 'novant_ssl.cer' not found in the current directory.")
     
-    if os.path.exists(cert_path):
-        print(f"✅ Using custom SSL certificate: {cert_path}")
-        os.environ["REQUESTS_CA_BUNDLE"] = cert_path
-        httpx_client = httpx.Client(verify=cert_path)
-    else:
-        print(f"⚠️  Certificate file {cert_path} not found.")
-        # You can choose one of these options:
-        # Option A: Use default SSL verification (recommended for production)
-        httpx_client = httpx.Client()  # Uses default CA bundle
-        # Option B: Disable SSL verification (only for development)
-        # httpx_client = httpx.Client(verify=False)
-        print("Using default SSL verification.")
+    # raise error if LANGFUSE_SECRET_KEY is missing
+    if not os.environ.get("LANGFUSE_SECRET_KEY"):
+        raise EnvironmentError("LANGFUSE_SECRET_KEY environment variable is not set.")
+    
+    os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
+
+    # Create httpx client with custom SSL certificate for Langfuse
+    httpx_client = httpx.Client(verify="novant_ssl.cer")
 
     # Initialize Langfuse with custom SSL configuration
     langfuse = Langfuse(
@@ -60,7 +59,7 @@ try:
     except Exception as e:
         print(f"⚠️  Langfuse auth check error: {e}")
     
-except ImportError as e:
+except Exception as e:
     print(f"⚠️  setup_observability not available. Error: {e}")
     print("⚠️  Continuing without observability setup.")
     langfuse = None
@@ -78,6 +77,7 @@ chat_client = AzureOpenAIChatClient(
 
 # Create agents
 med_triage_agent_executor = create_triage_executor_agent(chat_client)
+med_triage_agent = create_triage_agent(chat_client)
 joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
 
 # Lets make sure the json returned is valid, and route based on the boolean value.
@@ -114,7 +114,7 @@ def condition_medical_guidance(message: Any) -> bool:
 @executor(id="reply_emergency")
 async def handle_emergency(response: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
     print("Handling emergency response:", response)
-    await ctx.yield_output(f"If you're experiencing a medical emergency, you should call 911 or go to the emergency room!")
+    await ctx.yield_output(f"Yo, you should call 911 or go to the emergency room!")
 
 # So this is just a simple handler that replies with medical guidance instructions.
 # No LLM needed, and whatever we put in here is what the workflow will output.
@@ -129,9 +129,9 @@ workflow = (
     .set_start_executor(med_triage_agent_executor)
     # Start by short circuiting medical emergencies and medical advice.
     .add_edge(med_triage_agent_executor, handle_emergency, condition=lambda msg: condition_medical_emergency(msg))
-    #.add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
+    .add_edge(med_triage_agent_executor, handle_medical_guidance, condition=lambda msg: not condition_medical_emergency(msg) and condition_medical_guidance(msg))
     # So for this edge, it's not a medical emergency, or medical guidance, and we can move it to the joint surgery agent.
-    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_emergency(msg))
+    .add_edge(med_triage_agent_executor, joint_surgery_agent_executor_agent, condition=lambda msg: not condition_medical_guidance(msg) and not condition_medical_emergency(msg))
     .build()
 )
 
@@ -189,7 +189,91 @@ greetingAction = CopilotAction(
 sdk = CopilotKitRemoteEndpoint(actions=[greetingAction, medical_question_action]) 
 
 # Add the CopilotKit endpoint to your FastAPI app
-add_fastapi_endpoint(app, sdk, "/copilotkit_remote") 
+add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
+
+# Add a simple REST endpoint for testing/evaluation purposes
+@app.post("/ask")
+async def ask_question(request: dict):
+    """
+    Simple REST endpoint for directly querying the joint surgery info agent.
+    Bypasses the triage workflow and goes straight to the joint surgery agent.
+    
+    Example:
+        POST /ask
+        {"question": "I'm in pain, what should I do?"}
+    """
+    question = request.get("question", "")
+    if not question:
+        return {"error": "No question provided"}
+    
+    try:
+        # Create the joint surgery agent
+        joint_surgery_agent = create_joint_surgery_agent(chat_client)
+        # Use the ChatAgent directly with a simple run
+        response = await joint_surgery_agent.run(question)
+        
+        # Extract the response text
+        if response and hasattr(response, 'text'):
+            return {"response": response.text}
+        elif isinstance(response, str):
+            return {"response": response}
+        else:
+            return {"response": str(response)}
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@app.post("/ask_workflow")
+async def ask_question_workflow(request: dict):
+    """
+    REST endpoint that uses the full workflow including triage agent.
+    Routes through medical emergency detection and medical advice filtering.
+    
+    Example:
+        POST /ask_workflow
+        {"question": "I'm in pain, what should I do?"}
+    """
+    question = request.get("question", "")
+    if not question:
+        return {"error": "No question provided"}
+    
+    try:
+        # Create a request for the workflow
+        workflow_request = AgentExecutorRequest(
+            messages=[ChatMessage(Role.USER, text=question)],
+            should_respond=True
+        )
+        
+        # Run through the full workflow
+        events = await workflow.run(workflow_request)
+        outputs = events.get_outputs()
+        
+        # Extract the final response
+        if outputs and len(outputs) > 0:
+            output = outputs[-1]
+            
+            # Handle different output types
+            if isinstance(output, str):
+                response_text = output
+            elif hasattr(output, 'text'):
+                response_text = output.text
+            elif hasattr(output, 'agent_run_response') and output.agent_run_response:
+                response_text = output.agent_run_response.text
+            else:
+                # Fallback to string representation
+                response_text = str(output)
+            
+            return {"response": response_text}
+        else:
+            return {"response": "No response from workflow"}
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
 def main():
     """Run the uvicorn server."""
     import uvicorn
