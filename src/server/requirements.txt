@@ -16,4 +16,5 @@ azure-storage-blob
 azure-identity
 azure-search-documents
 azure-core
+azure-cosmos
 langfuse

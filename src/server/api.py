@@ -1,6 +1,7 @@
 import os
 import uuid
 from typing import Any, Never
+from datetime import datetime
 
 from agent_framework import AgentExecutorRequest, AgentExecutorResponse, ChatMessage, Role, WorkflowBuilder, WorkflowContext, executor
 import dotenv
@@ -12,57 +13,66 @@ from copilotkit.integrations.fastapi import add_fastapi_endpoint
 
 from medical_triage_agent import create_executor_agent as create_triage_executor_agent, MedicalTriageResult
 from joint_surgery_info_agent import create_executor_agent as create_joint_surgery_executor_agent
+from memory_helper import MemoryHelper
 
 # Load environment variables
 dotenv.load_dotenv()
 
-# Setup Langfuse observability
-try:
-    from agent_framework.observability import setup_observability
-    from langfuse import Langfuse
-    import httpx
+# Setup Langfuse observability - DISABLED to reduce console output
+# Uncomment the following block to re-enable Langfuse telemetry
 
-    # Check if certificate file exists, otherwise use default SSL verification
-    cert_path = os.path.join(os.path.dirname(__file__), "novant_ssl.cer")
-    
-    if os.path.exists(cert_path):
-        print(f"✅ Using custom SSL certificate: {cert_path}")
-        os.environ["REQUESTS_CA_BUNDLE"] = cert_path
-        httpx_client = httpx.Client(verify=cert_path)
-    else:
-        print(f"⚠️  Certificate file {cert_path} not found.")
-        # You can choose one of these options:
-        # Option A: Use default SSL verification (recommended for production)
-        httpx_client = httpx.Client()  # Uses default CA bundle
-        # Option B: Disable SSL verification (only for development)
-        # httpx_client = httpx.Client(verify=False)
-        print("Using default SSL verification.")
+# try:
+#     from agent_framework.observability import setup_observability
+#     from langfuse import Langfuse
+#     import httpx
 
-    # Initialize Langfuse with custom SSL configuration
-    langfuse = Langfuse(
-        secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
-        public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
-        host=os.environ.get("LANGFUSE_HOST"),
-        httpx_client=httpx_client
-    )
+#     # Check if certificate file exists, otherwise use default SSL verification
+#     cert_path = os.path.join(os.path.dirname(__file__), "novant_ssl.cer")
     
-    # Setup observability
-    setup_observability(enable_sensitive_data=True)
-    print("✅ Observability setup completed!")
+#     if os.path.exists(cert_path):
+#         print(f"✅ Using custom SSL certificate: {cert_path}")
+#         os.environ["REQUESTS_CA_BUNDLE"] = cert_path
+#         httpx_client = httpx.Client(verify=cert_path)
+#     else:
+#         print(f"⚠️  Certificate file {cert_path} not found.")
+#         # You can choose one of these options:
+#         # Option A: Use default SSL verification (recommended for production)
+#         httpx_client = httpx.Client()  # Uses default CA bundle
+#         # Option B: Disable SSL verification (only for development)
+#         # httpx_client = httpx.Client(verify=False)
+#         print("Using default SSL verification.")
+
+#     # Initialize Langfuse with custom SSL configuration
+#     langfuse = Langfuse(
+#         secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
+#         public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
+#         host=os.environ.get("LANGFUSE_HOST"),
+#         httpx_client=httpx_client
+
+#     )
     
-    # Verify Langfuse connection
-    try:
-        if langfuse.auth_check():
-            print("✅ Langfuse client authenticated and ready!")
-        else:
-            print("⚠️  Langfuse authentication failed")
-    except Exception as e:
-        print(f"⚠️  Langfuse auth check error: {e}")
+#     # Setup observability
+#     setup_observability(enable_sensitive_data=True)
+#     print("✅ Observability setup completed!")
     
-except ImportError as e:
-    print(f"⚠️  setup_observability not available. Error: {e}")
-    print("⚠️  Continuing without observability setup.")
-    langfuse = None
+#     # Verify Langfuse connection
+#     try:
+#         if langfuse.auth_check():
+#             print("✅ Langfuse client authenticated and ready!")
+#         else:
+#             print("⚠️  Langfuse authentication failed")
+#     except Exception as e:
+#         print(f"⚠️  Langfuse auth check error: {e}")
+    
+# except ImportError as e:
+#     print(f"⚠️  setup_observability not available. Error: {e}")
+#     print("⚠️  Continuing without observability setup.")
+#     langfuse = None
+
+
+# Langfuse telemetry disabled - set to None
+langfuse = None
+print("ℹ️  Langfuse telemetry disabled to reduce console output")
 
 api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
@@ -78,6 +88,20 @@ chat_client = AzureOpenAIChatClient(
 # Create agents
 med_triage_agent_executor = create_triage_executor_agent(chat_client)
 joint_surgery_agent_executor_agent = create_joint_surgery_executor_agent(chat_client)
+
+# Initialize the memory helper so we can store the conversation history in CosmosDB.
+try:
+    memory_helper = MemoryHelper()
+    print("✓ MemoryHelper initialized successfully")
+except Exception as e:
+    print(f"✗ Failed to initialize MemoryHelper: {e}")
+    print("Continuing with in-memory storage only...")
+    memory_helper = None  # Set to None if initialization fails
+
+# Now lets create a thread_id for conversation history storage. Set to None for new conversations.
+# However, if the user gives us their name and birthday, we can use that to create a consistent thread id.
+current_thread_id = None
+conversation_threads = {}
 
 # Lets make sure the json returned is valid, and route based on the boolean value.
 def condition_medical_emergency(message: Any) -> bool:
@@ -144,27 +168,60 @@ workflow = (
 # Initialize FastAPI app
 app = FastAPI()
 
-# In-memory conversation history storage
-# In production, replace with a database (Redis, PostgreSQL, etc.)
-conversation_threads = {}
-
 # Backend Actions.
 # this is a dummy action for demonstration purposes, but will work in testing.
 async def getUserAction(name: str, birthday: str):
+    global current_thread_id
+    
     # Replace with your database logic
     print("Received user information in getUserAction:", name, birthday)
-    return {"Thanks for the information! {name} how can I assist you further?"}
+    # remove any spaces from name and birthday for thread ID generation
+    name = name.replace(" ", "_")
+    birthday = birthday.replace(" ", "_")
+    # Lets generate a threadId for this user based on that info.
+    thread_id = f"user_{name}_{birthday}"
+    print("Generated thread ID:", thread_id)
+    
+    # Store the thread ID globally for use in subsequent medical questions
+    current_thread_id = thread_id
+    
+    # Use the memory helper if available
+    if memory_helper is not None:
+        conversation_threads = memory_helper.read_all_memory_for_thread(thread_id)
+        print(f"Retrieved {len(conversation_threads)} messages for thread ID {thread_id}")
+    else:
+        conversation_threads = []
+
+    return {"message": f"Thanks for the information! {name} how can I assist you further?"}
 
 # this is the medical emergency action for demonstration purposes
 async def ask_medical_question_workflow_agent(question: str, thread_id: str = None):
+    global current_thread_id
+    
     print("Received question in ask_medical_question_workflow_agent:", question)
-    print("Thread ID:", thread_id)
+    
+    # Use the stored thread ID if no thread_id is provided
+    if not thread_id and current_thread_id:
+        thread_id = current_thread_id
+        print(f"Using stored thread ID: {thread_id}")
+    else:
+        print("Thread ID:", thread_id)
     
     # Retrieve conversation history if thread_id provided
     messages = []
-    if thread_id and thread_id in conversation_threads:
+    if thread_id and memory_helper is not None:
+        # Get conversation history from CosmosDB
+        memory_data = memory_helper.read_memory(thread_id)
+        if memory_data and "conversation_history" in memory_data:
+            # Convert stored conversation history back to ChatMessage objects
+            for msg in memory_data["conversation_history"]:
+                role = Role.USER if msg["role"] == "user" else Role.ASSISTANT
+                messages.append(ChatMessage(role, text=msg["content"]))
+            print(f"Continuing conversation with {len(messages)} previous messages from CosmosDB")
+    elif thread_id and thread_id in conversation_threads:
+        # Fallback to in-memory storage
         messages = conversation_threads[thread_id].copy()
-        print(f"Continuing conversation with {len(messages)} previous messages")
+        print(f"Continuing conversation with {len(messages)} previous messages from memory")
     
     # Add the new user message
     messages.append(ChatMessage(Role.USER, text=question))
@@ -178,13 +235,39 @@ async def ask_medical_question_workflow_agent(question: str, thread_id: str = No
     outputs = events.get_outputs()
     response = outputs[-1]
     
-    # Generate thread_id if this is a new conversation
+    # Generate thread_id if this is a new conversation (and no stored one exists)
     if not thread_id:
         thread_id = str(uuid.uuid4())
+        current_thread_id = thread_id  # Store it globally
         print(f"Created new thread: {thread_id}")
     
-    # Store the conversation history (user message + assistant response)
+    # Store the conversation history
     messages.append(ChatMessage(Role.ASSISTANT, text=str(response)))
+    
+    # Store in CosmosDB if available
+    if memory_helper is not None:
+        # Convert ChatMessage objects to serializable format
+        conversation_history = []
+        for msg in messages:
+            conversation_history.append({
+                "role": "user" if msg.role == Role.USER else "assistant",
+                "content": msg.text,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        
+        memory_data = {
+            "conversation_history": conversation_history,
+            "thread_metadata": {
+                "last_updated": datetime.utcnow().isoformat(),
+                "message_count": len(conversation_history)
+            }
+        }
+        
+        success = memory_helper.write_memory(thread_id, memory_data)
+        if not success:
+            print(f"Failed to save conversation to CosmosDB for thread {thread_id}")
+    
+    # Also store in memory as fallback
     conversation_threads[thread_id] = messages
     
     print("Medical Question Agent Response in action:", response)
