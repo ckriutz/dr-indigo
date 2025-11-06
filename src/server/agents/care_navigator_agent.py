@@ -44,3 +44,14 @@ def create_care_navigator_executor(client: AzureOpenAIChatClient) -> AgentExecut
         streaming=True,
         id="care_navigator_agent_executor",
     )
+
+
+def create_care_navigator_agent(client: AzureOpenAIChatClient) -> ChatAgent:
+    """Create the care navigator ChatAgent without the executor wrapper.
+    Useful for direct queries that don't need workflow integration."""
+    return ChatAgent(
+        chat_client=client,
+        tools=[search_medical_guidance],
+        instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
+        name="CareNavigatorAgent",
+    )
