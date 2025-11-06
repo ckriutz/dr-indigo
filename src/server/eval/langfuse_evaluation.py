@@ -169,7 +169,7 @@ Respond with ONLY 'PASS' or 'FAIL' followed by a brief explanation.
 
     try:
         completion = llm_client.chat.completions.create(
-            model=os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4"),
+            model=os.environ.get("AZURE_OPENAI_JUDGE_MODEL", "gpt-4"),
             messages=[
                 {"role": "user", "content": prompt}
             ],

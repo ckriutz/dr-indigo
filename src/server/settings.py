@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     langfuse_secret_key: Optional[str] = None
     langfuse_public_key: Optional[str] = None
     langfuse_host: Optional[str] = None
+    azure_openai_judge_model: Optional[str] = None
 
 
 def _compile_settings() -> Settings:
