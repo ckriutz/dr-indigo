@@ -376,7 +376,7 @@ def main():
     parser.add_argument(
         "--max_workers",
         type=int,
-        default=1,
+        default=5,
         help="Maximum number of parallel workers (default: 5)",
     )
     parser.add_argument(
