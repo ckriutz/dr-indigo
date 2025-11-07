@@ -41,7 +41,6 @@ def create_care_navigator_executor(client: AzureOpenAIChatClient) -> AgentExecut
             instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
             name="CareNavigatorAgent",
         ),
-        streaming=True,
         id="care_navigator_agent_executor",
     )
 

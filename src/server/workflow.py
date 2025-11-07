@@ -11,13 +11,9 @@ from agent_framework import (
 )
 from agent_framework.azure import AzureOpenAIChatClient
 
-from agents.care_navigator_agent import (
-    create_care_navigator_executor,
-)
-from agents.medical_triage_agent import MedicalTriageResult
-from agents.medical_triage_agent import (
-    create_executor_agent as create_triage_executor_agent,
-)
+from agents.care_navigator_agent import create_care_navigator_executor
+from agents.medical_triage_agent import MedicalTriageResult, create_triage_executor_agent
+
 from settings import AUBREY_SETTINGS
 
 
@@ -30,7 +26,7 @@ _TRIAGE_EXECUTOR_ID = "medical_triage_agent_executor"
 _CARE_NAV_EXECUTOR_ID = "care_navigator_agent_executor"
 
 
-def _get_chat_client(
+def get_chat_client(
     api_key: str | None,
     endpoint: str | None,
     deployment: str | None,
@@ -121,7 +117,7 @@ def _condition_medical_emergency(message: Any) -> bool:
 
 def create_workflow() -> Workflow:
     med_triage_agent_executor = create_triage_executor_agent(
-        _get_chat_client(
+        get_chat_client(
             AUBREY_SETTINGS.azure_openai_api_key,
             AUBREY_SETTINGS.azure_openai_endpoint,
             AUBREY_SETTINGS.azure_openai_triage_model,
@@ -129,7 +125,7 @@ def create_workflow() -> Workflow:
     )
 
     care_navigator_executor = create_care_navigator_executor(
-        _get_chat_client(
+        get_chat_client(
             AUBREY_SETTINGS.azure_openai_api_key,
             AUBREY_SETTINGS.azure_openai_endpoint,
             AUBREY_SETTINGS.azure_openai_care_nav_model,

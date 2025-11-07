@@ -1,8 +1,8 @@
 from agent_framework.observability import setup_observability
-from langfuse import Langfuse
 import httpx
 import os
 from settings import AUBREY_SETTINGS
+from langfuse import Langfuse
 
 
 def initiate_telemetry():
