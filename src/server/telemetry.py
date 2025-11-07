@@ -1,8 +1,11 @@
-from agent_framework.observability import setup_observability
-import httpx
 import os
-from settings import AUBREY_SETTINGS
+
+import httpx
+from agent_framework.observability import setup_observability
 from langfuse import Langfuse
+from settings import AUBREY_SETTINGS
+
+os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
 
 
 def initiate_telemetry():

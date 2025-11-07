@@ -1,5 +1,6 @@
-# Shared base image and tooling for runtime and evaluation targets
-FROM --platform=linux/amd64 python:3.12-slim AS base
+
+# Base image compatible with Azure App Service
+FROM python:3.12-slim as base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
 	PYTHONUNBUFFERED=1
@@ -9,15 +10,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # Copy dependency definitions before the rest of the source for better caching
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock ./src/server/
+
+WORKDIR /app/src/server
 
 # Runtime container for serving the FastAPI application
 FROM base AS runtime
 
 RUN uv sync --frozen --no-dev --no-cache
 
-ENV PATH="/app/.venv/bin:${PATH}" \
-	PORT=8000
+# Ensure the virtual environment binaries are on PATH for subsequent layers and runtime
+ENV PATH="/app/src/server/.venv/bin:${PATH}"
+ENV PYTHONPATH="/app:${PYTHONPATH}"
 
 # Copy the rest of the application code
 COPY . .
