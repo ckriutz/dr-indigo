@@ -128,6 +128,9 @@ async def ask_question_workflow(request: dict):
         return {"error": "No question provided"}
     
     try:
+
+        request_workflow = create_workflow()
+        
         # Create a request for the workflow
         workflow_request = AgentExecutorRequest(
             messages=[ChatMessage(Role.USER, text=question)],
@@ -135,7 +138,7 @@ async def ask_question_workflow(request: dict):
         )
         
         # Run through the full workflow
-        events = await workflow.run(workflow_request)
+        events = await request_workflow.run(workflow_request)
         outputs = events.get_outputs()
         
         # Extract the final response
