@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 # from telemetry import initiate_telemetry
-from src.server.agents.care_navigator_agent import create_care_navigator_agent
-from src.server.settings import AUBREY_SETTINGS
+from agents.care_navigator_agent import create_care_navigator_agent
+from settings import AUBREY_SETTINGS
 from workflow import create_workflow, get_chat_client
 
 # initiate_telemetry()
