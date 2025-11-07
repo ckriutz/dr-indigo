@@ -43,3 +43,14 @@ def create_care_navigator_executor(client: AzureOpenAIChatClient) -> AgentExecut
         ),
         id="care_navigator_agent_executor",
     )
+
+
+# Both the executor and chat agent share the same instruction set so that the
+# workflow can either call the executor directly or embed the agent elsewhere.
+def create_care_navigator_agent(client: AzureOpenAIChatClient) -> ChatAgent:
+    return ChatAgent(
+        chat_client=client,
+        tools=[search_medical_guidance],
+        instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
+        name="CareNavigatorAgent",
+    )

@@ -1,10 +1,13 @@
+
 from agent_framework import AgentExecutorRequest, ChatMessage, Role
 from fastapi import FastAPI
 
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 # from telemetry import initiate_telemetry
-from workflow import create_workflow
+from src.server.agents.care_navigator_agent import create_care_navigator_agent
+from src.server.settings import AUBREY_SETTINGS
+from workflow import create_workflow, get_chat_client
 
 # initiate_telemetry()
 
@@ -67,6 +70,94 @@ sdk = CopilotKitRemoteEndpoint(actions=[greetingAction, medical_question_action]
 
 # Add the CopilotKit endpoint to your FastAPI app
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
+
+
+# Add a simple REST endpoint for testing/evaluation purposes
+@app.post("/ask")
+async def ask_question(request: dict):
+    """
+    Simple REST endpoint for directly querying the joint surgery info agent.
+    Bypasses the triage workflow and goes straight to the joint surgery agent.
+    
+    Example:
+        POST /ask
+        {"question": "I'm in pain, what should I do?"}
+    """
+    question = request.get("question", "")
+    if not question:
+        return {"error": "No question provided"}
+    
+    try:
+        # Create the care navigator agent
+        care_navigator_agent = create_care_navigator_agent(get_chat_client(
+            AUBREY_SETTINGS.azure_openai_api_key,
+            AUBREY_SETTINGS.azure_openai_endpoint,
+            AUBREY_SETTINGS.azure_openai_care_nav_model,
+        ))
+        # Use the ChatAgent directly with a simple run
+        response = await care_navigator_agent.run(question)
+
+        # Extract the response text
+        if response and hasattr(response, 'text'):
+            return {"response": response.text}
+        elif isinstance(response, str):
+            return {"response": response}
+        else:
+            return {"response": str(response)}
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@app.post("/ask_workflow")
+async def ask_question_workflow(request: dict):
+    """
+    REST endpoint that uses the full workflow including triage agent.
+    Routes through medical emergency detection and medical advice filtering.
+    
+    Example:
+        POST /ask_workflow
+        {"question": "I'm in pain, what should I do?"}
+    """
+    question = request.get("question", "")
+    if not question:
+        return {"error": "No question provided"}
+    
+    try:
+        # Create a request for the workflow
+        workflow_request = AgentExecutorRequest(
+            messages=[ChatMessage(Role.USER, text=question)],
+            should_respond=True
+        )
+        
+        # Run through the full workflow
+        events = await workflow.run(workflow_request)
+        outputs = events.get_outputs()
+        
+        # Extract the final response
+        if outputs and len(outputs) > 0:
+            output = outputs[-1]
+            
+            # Handle different output types
+            if isinstance(output, str):
+                response_text = output
+            elif hasattr(output, 'text'):
+                response_text = output.text
+            elif hasattr(output, 'agent_run_response') and output.agent_run_response:
+                response_text = output.agent_run_response.text
+            else:
+                # Fallback to string representation
+                response_text = str(output)
+            
+            return {"response": response_text}
+        else:
+            return {"response": "No response from workflow"}
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
 
 
 def main():
