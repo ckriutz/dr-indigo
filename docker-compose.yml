@@ -1,0 +1,35 @@
+services:
+  client:
+    build:
+      context: ./src/client/dr-indigo
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "3000"
+      COPILOTKIT_REMOTE_ENDPOINT: ${COPILOTKIT_REMOTE_ENDPOINT:-http://server:8000/copilotkit_remote}
+    env_file:
+      - ./src/client/dr-indigo/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+    networks:
+      - appnet
+
+  server:
+    build:
+      context: ./src/server
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8000"
+    env_file:
+      - ./src/server/.env
+    ports:
+      - "8000:8000"
+    networks:
+      - appnet
+
+networks:
+  appnet:
+    driver: bridge
