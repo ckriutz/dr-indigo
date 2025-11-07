@@ -26,7 +26,7 @@ _TRIAGE_EXECUTOR_ID = "medical_triage_agent_executor"
 _CARE_NAV_EXECUTOR_ID = "care_navigator_agent_executor"
 
 
-def _get_chat_client(
+def get_chat_client(
     api_key: str | None,
     endpoint: str | None,
     deployment: str | None,
@@ -117,7 +117,7 @@ def _condition_medical_emergency(message: Any) -> bool:
 
 def create_workflow() -> Workflow:
     med_triage_agent_executor = create_triage_executor_agent(
-        _get_chat_client(
+        get_chat_client(
             AUBREY_SETTINGS.azure_openai_api_key,
             AUBREY_SETTINGS.azure_openai_endpoint,
             AUBREY_SETTINGS.azure_openai_triage_model,
@@ -125,7 +125,7 @@ def create_workflow() -> Workflow:
     )
 
     care_navigator_executor = create_care_navigator_executor(
-        _get_chat_client(
+        get_chat_client(
             AUBREY_SETTINGS.azure_openai_api_key,
             AUBREY_SETTINGS.azure_openai_endpoint,
             AUBREY_SETTINGS.azure_openai_care_nav_model,
