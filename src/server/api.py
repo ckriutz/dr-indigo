@@ -19,10 +19,13 @@ workflow = create_workflow()
 # this is the medical emergency action for demonstration purposes
 async def ask_medical_question_workflow_agent(question: str):
     print("Received question in ask_medical_question_workflow_agent:", question)
+
+    request_workflow = create_workflow()
+    
     request = AgentExecutorRequest(
         messages=[ChatMessage(Role.USER, text=question)], should_respond=True
     )
-    events = await workflow.run(request)
+    events = await request_workflow.run(request)
     outputs = events.get_outputs()
     response = outputs[-1]
     print("Medical Question Agent Response in action:", response)
