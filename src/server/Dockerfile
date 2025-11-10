@@ -1,5 +1,5 @@
 # Base image compatible with Azure App Service
-FROM --platform=linux/amd64 python:3.12-slim
+FROM python:3.12-slim
 
 # Configure environment and working directory
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -9,6 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
+
+# Prepare project layout expected by the application imports
+RUN mkdir -p src/server
 
 # Install system dependencies and uv package manager
 # RUN apt-get update && \
@@ -26,13 +29,16 @@ WORKDIR /app
 # USER appuser
 
 # Copy dependency definitions before the rest of the source for better caching
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock ./src/server/
+
+WORKDIR /app/src/server
 
 # Sync pinned dependencies into a project-local virtualenv using uv.lock
 RUN uv sync --frozen --no-dev --no-cache
 
 # Ensure the virtual environment binaries are on PATH for subsequent layers and runtime
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/src/server/.venv/bin:${PATH}"
+ENV PYTHONPATH="/app:${PYTHONPATH}"
 
 # Copy the rest of the application code
 COPY . .

@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from copilotkit import CopilotKitRemoteEndpoint, Action as CopilotAction
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 # from telemetry import initiate_telemetry
-from src.server.agents.care_navigator_agent import create_care_navigator_agent
-from src.server.settings import AUBREY_SETTINGS
+from agents.care_navigator_agent import create_care_navigator_agent
+from settings import AUBREY_SETTINGS
 from workflow import create_workflow, get_chat_client
 
 # initiate_telemetry()
@@ -19,10 +19,13 @@ workflow = create_workflow()
 # this is the medical emergency action for demonstration purposes
 async def ask_medical_question_workflow_agent(question: str):
     print("Received question in ask_medical_question_workflow_agent:", question)
+
+    request_workflow = create_workflow()
+    
     request = AgentExecutorRequest(
         messages=[ChatMessage(Role.USER, text=question)], should_respond=True
     )
-    events = await workflow.run(request)
+    events = await request_workflow.run(request)
     outputs = events.get_outputs()
     response = outputs[-1]
     print("Medical Question Agent Response in action:", response)
@@ -125,6 +128,9 @@ async def ask_question_workflow(request: dict):
         return {"error": "No question provided"}
     
     try:
+
+        request_workflow = create_workflow()
+        
         # Create a request for the workflow
         workflow_request = AgentExecutorRequest(
             messages=[ChatMessage(Role.USER, text=question)],
@@ -132,7 +138,7 @@ async def ask_question_workflow(request: dict):
         )
         
         # Run through the full workflow
-        events = await workflow.run(workflow_request)
+        events = await request_workflow.run(workflow_request)
         outputs = events.get_outputs()
         
         # Extract the final response
