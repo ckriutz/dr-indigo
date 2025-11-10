@@ -27,6 +27,18 @@ dependencies = [
 dev = [
     "ruff>=0.14.3",
 ]
+eval = [
+    "tqdm>=4.66.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.24.0",
+]
+
+[project.optional-dependencies]
+eval = [
+    "tqdm>=4.66.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.24.0",
+]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

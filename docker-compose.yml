@@ -21,6 +21,7 @@ services:
     build:
       context: ./src/server
       dockerfile: Dockerfile
+      target: runtime
     environment:
       PORT: "8000"
     env_file:

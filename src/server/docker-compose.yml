@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     platform: linux/amd64
     ports:
       - "8000:8000"
@@ -12,3 +13,19 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+
+  eval:
+    image: dr-indigo-eval
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: eval
+    platform: linux/amd64
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      AGENT_SERVER_URL: http://api:8000
+    restart: "no"

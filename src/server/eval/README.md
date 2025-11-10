@@ -7,7 +7,7 @@ This directory contains evaluation scripts for testing the Dr. Indigo medical as
 - `local_evaluation.py` - **Local evaluation script** that queries the running agent server via HTTP and saves results to JSON
 - `langfuse_evaluation.py` - **Langfuse evaluation script** that pulls datasets from Langfuse and records experiment results
 - `questions_answers.csv` - Local dataset of test questions and expected answers (for local_evaluation.py)
-- `requirements.txt` - Additional Python dependencies needed for evaluation
+- `pyproject.toml` `eval` group - Additional Python dependencies needed for evaluation
 - `.env` - Environment variables (Azure OpenAI, Langfuse credentials)
 
 ## Evaluation Approaches
@@ -26,20 +26,24 @@ The `local_evaluation.py` script queries the running agent server via HTTP using
 ### Prerequisites
 
 1. **Start the Agent Server** - The server must be running before evaluation:
+
    ```bash
    cd ../server
    python api.py
    # Server should start at http://localhost:8000
    ```
 
-2. **Install Evaluation Dependencies**:
+2. **Install Evaluation Dependencies** (run from `src/server`):
+
    ```bash
-   cd ../eval
-   pip install -r requirements.txt
+   uv sync --group eval
+   # or use pip
+   pip install ".[eval]"
    ```
 
 3. **Environment Variables** - Ensure your `.env` file in the server directory has Azure OpenAI credentials:
-   ```
+
+   ```bash
    AZURE_OPENAI_API_KEY=your_key
    AZURE_OPENAI_ENDPOINT=your_endpoint
    AZURE_OPENAI_DEPLOYMENT=your_deployment
@@ -189,9 +193,12 @@ The `langfuse_evaluation.py` script integrates with Langfuse for dataset managem
 
 1. **Start the Agent Server** (same as local evaluation)
 
-2. **Install Dependencies**:
+2. **Install Dependencies** (run from `src/server`):
+
    ```bash
-   pip install -r requirements.txt
+   uv sync --group eval
+   # or use pip
+   pip install ".[eval]"
    ```
 
 3. **Environment Variables** - Ensure your `.env` file has:
