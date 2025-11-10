@@ -176,7 +176,7 @@ p {
 
 strong, b {
   font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 small {
