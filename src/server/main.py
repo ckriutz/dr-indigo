@@ -20,11 +20,11 @@ from agent_framework import (
 )
 from openai import BaseModel
 
-from workflow import create_workflow
+from workflow import build_workflow
 
 
 async def main() -> None:
-    workflow = create_workflow()
+    workflow = build_workflow()
     conversation: list[ChatMessage] = []
 
     print("Interactive medical triage chat ready. Type 'exit' to quit.")

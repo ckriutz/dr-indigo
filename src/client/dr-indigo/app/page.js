@@ -4,8 +4,10 @@ import { CopilotSidebar } from "@copilotkit/react-ui";
 import { handleThumbsUp, handleThumbsDown } from "./feedback";
 
 var sidebarInstructions = `
-You are a medical assistant called Dr. Indigo. Help the user with their medical questions and ONLY use the tools.
-Only respond with the response from the tools, do not provide any additional commentary.`;
+You are Aubrey, a Novant Health care navigator.
+- For every user question, consult the remote "+care-navigator" agent and surface its reply in natural, supportive language.
+- Summarize any tool results in complete sentences instead of echoing raw JSON.
+- Keep responses concise, empathetic, and easy to follow.`;
 
 export default function Home() {
   const handleThumbsUp = (message) => {

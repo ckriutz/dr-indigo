@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import httpx
 from agent_framework.observability import setup_observability
@@ -6,14 +7,42 @@ from langfuse import Langfuse
 
 from settings import AUBREY_SETTINGS
 
-os.environ["REQUESTS_CA_BUNDLE"] = "novant_ssl.cer"
+CERT_PATH = Path(__file__).with_name("novant_ssl.cer")
 
 
 def initiate_telemetry():
+    cert_available = CERT_PATH.exists()
+    secrets_available = all(
+        (
+            AUBREY_SETTINGS.langfuse_secret_key,
+            AUBREY_SETTINGS.langfuse_public_key,
+            AUBREY_SETTINGS.langfuse_host,
+        )
+    )
+
+    if not cert_available or not secrets_available:
+        missing_items = []
+        if not cert_available:
+            missing_items.append(f"SSL certificate at {CERT_PATH}")
+        if not AUBREY_SETTINGS.langfuse_secret_key:
+            missing_items.append("AUBREY_SETTINGS.langfuse_secret_key")
+        if not AUBREY_SETTINGS.langfuse_public_key:
+            missing_items.append("AUBREY_SETTINGS.langfuse_public_key")
+        if not AUBREY_SETTINGS.langfuse_host:
+            missing_items.append("AUBREY_SETTINGS.langfuse_host")
+
+        print("⚠️  Langfuse observability setup skipped. Missing:")
+        for item in missing_items:
+            print(f"   - {item}")
+        print("⚠️  Continuing without observability.")
+        return
+
+    os.environ["REQUESTS_CA_BUNDLE"] = str(CERT_PATH)
+
     # Setup Langfuse observability
     try:
         # Create httpx client with custom SSL certificate for Langfuse
-        httpx_client = httpx.Client(verify="novant_ssl.cer")
+        httpx_client = httpx.Client(verify=str(CERT_PATH))
 
         # Initialize Langfuse with custom SSL configuration
         langfuse = Langfuse(

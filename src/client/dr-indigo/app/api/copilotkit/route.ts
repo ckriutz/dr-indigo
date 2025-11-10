@@ -5,17 +5,10 @@ import {
 } from '@copilotkit/runtime';
 import { AzureOpenAI } from 'openai';
 import { NextRequest } from 'next/server';
+import { HttpAgent } from '@ag-ui/client';
 
-const remoteEndpoint = process.env["COPILOTKIT_REMOTE_ENDPOINT"] || "http://localhost:8000/copilotkit_remote";
-
-const runtime = new CopilotRuntime({
-    remoteEndpoints: [
-        { url: remoteEndpoint },
-    ],
-    onError: (error) => {
-        console.error("Copilot Runtime Error:", error);
-    }
-});
+// const remoteEndpoint = process.env["COPILOTKIT_REMOTE_ENDPOINT"] || "http://localhost:8000/copilotkit_remote";
+const remoteEndpoint = "http://server:8000/agent";
 
 let cachedServiceAdapter: OpenAIAdapter | null = null;
 
@@ -46,6 +39,24 @@ const resolveServiceAdapter = () => {
 
     return cachedServiceAdapter;
 };
+
+const careNavigatorAgent = new HttpAgent({
+    agentId: "care-navigator",
+    description: "Routes medical queries through the server-side triage workflow.",
+    url: remoteEndpoint,
+});
+
+const runtime = new CopilotRuntime({
+    // remoteEndpoints: [
+    //     { url: remoteActionsEndpoint },
+    // ],
+    agents: {
+        "care-navigator": careNavigatorAgent,
+    },
+    onError: (error) => {
+        console.error("Copilot Runtime Error:", error);
+    }
+});
 
 export const POST = async (req: NextRequest) => {
     const serviceAdapter = resolveServiceAdapter();

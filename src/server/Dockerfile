@@ -1,5 +1,5 @@
 # Base image compatible with Azure App Service
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Configure environment and working directory
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,6 +12,11 @@ WORKDIR /app
 
 # Prepare project layout expected by the application imports
 RUN mkdir -p src/server
+
+# Install git for fetching VCS dependencies during uv sync
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends git && \
+	rm -rf /var/lib/apt/lists/*
 
 # Install system dependencies and uv package manager
 # RUN apt-get update && \

@@ -3,7 +3,7 @@ name = "dr-indigo-server"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "azure-identity",
     "openai",
@@ -21,6 +21,7 @@ dependencies = [
     "azure-search-documents>=11.6.0",
     "pydantic-settings>=2.6.0",
     "langfuse>=3.9.0",
+    "ag-ui-agent-framework @ git+https://github.com/mheindl-nh/ag-ui.git@main#subdirectory=integrations/agent-framework/python",
 ]
 
 [dependency-groups]
