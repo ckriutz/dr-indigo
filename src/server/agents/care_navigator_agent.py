@@ -1,7 +1,10 @@
 from agent_framework import AgentExecutor, ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 
-from tools.search_medical_guidance import search_medical_guidance
+from tools.ai_search_tool import create_search_tool
+
+# Create the search tool instance once at module level
+ai_search_tool = create_search_tool()
 
 # If external information is required, ask them to call the top level novant phone number - eventually contacting the care navigator directly.
 # Include 911 guidance.
@@ -33,24 +36,46 @@ Your goal is to ensure patients feel listened to and receive clear next steps de
 
 # Both the executor and chat agent share the same instruction set so that the
 # workflow can either call the executor directly or embed the agent elsewhere.
-def create_care_navigator_executor(client: AzureOpenAIChatClient) -> AgentExecutor:
+def create_care_navigator_executor(
+    client: AzureOpenAIChatClient,
+    chat_message_store_factory=None
+) -> AgentExecutor:
+
+    print(f"🏗️  Creating care navigator with message_store_factory: {chat_message_store_factory is not None}")
+
+    agent = ChatAgent(
+        chat_client=client,
+        tools=[ai_search_tool],
+        instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
+        name="CareNavigatorAgent",
+        chat_message_store_factory=chat_message_store_factory,
+    )
+    
+    # Create a thread with the message store if factory is provided
+    agent_thread = None
+    if chat_message_store_factory:
+        print("📝 Creating new thread for care navigator...")
+        agent_thread = agent.get_new_thread()
+        print("✅ Created thread for care navigator")
+
     return AgentExecutor(
-        ChatAgent(
-            chat_client=client,
-            tools=[search_medical_guidance],
-            instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
-            name="CareNavigatorAgent",
-        ),
+        agent,
         id="care_navigator_agent_executor",
+        agent_thread=agent_thread,
     )
 
 
 # Both the executor and chat agent share the same instruction set so that the
 # workflow can either call the executor directly or embed the agent elsewhere.
-def create_care_navigator_agent(client: AzureOpenAIChatClient) -> ChatAgent:
+def create_care_navigator_agent(
+    client: AzureOpenAIChatClient,
+    chat_message_store_factory=None
+) -> ChatAgent:
+    print(f"🏗️  Creating care navigator agent with message_store_factory: {chat_message_store_factory is not None}")
     return ChatAgent(
         chat_client=client,
-        tools=[search_medical_guidance],
+        tools=[ai_search_tool],
         instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
         name="CareNavigatorAgent",
+        chat_message_store_factory=chat_message_store_factory,
     )

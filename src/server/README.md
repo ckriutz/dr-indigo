@@ -21,7 +21,19 @@ This project implements a workflow-based medical agent system that:
 
 ### Prerequisites
 
-This project runs in a dev container, so no virtual environment (venv) setup is needed.
+This project is designed to run in a development container with all dependencies pre-configured.
+
+**Important**: The devcontainer includes an updated SQLite version (3.46.1) required for ChromaDB compatibility. The base devcontainer image only includes SQLite 3.34.1, which is incompatible with ChromaDB >= 1.3.3.
+
+### Development Container Setup
+
+1. **Open in VS Code**: Open this project in VS Code
+2. **Reopen in Container**: When prompted, click "Reopen in Container" or use Command Palette → "Dev Containers: Reopen in Container"
+3. **Wait for Setup**: The container will build and install dependencies automatically
+4. **Verify Setup**: Run the verification script:
+   ```bash
+   ./.devcontainer/verify-setup.sh
+   ```
 
 ### Environment Configuration
 
@@ -48,6 +60,14 @@ This project runs in a dev container, so no virtual environment (venv) setup is 
 ```bash
 pip install -r requirements.txt
 ```
+
+### SQLite Compatibility Note
+
+If you encounter the error `RuntimeError: Your system has an unsupported version of sqlite3. Chroma requires sqlite3 >= 3.35.0`, this indicates you're not using the development container. The devcontainer automatically handles this by including SQLite 3.46.1.
+
+**Solutions:**
+- **Recommended**: Use the development container (see above)
+- **Manual fix**: See `.devcontainer/README.md` for manual SQLite installation instructions
 
 ## Running the Application
 

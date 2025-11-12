@@ -1,6 +1,5 @@
 from typing import Any, Never
 
-
 from agent_framework import (
     AgentExecutorRequest,
     AgentExecutorResponse,
@@ -16,9 +15,7 @@ from agents.medical_triage_agent import (
     MedicalTriageResult,
     create_triage_executor_agent,
 )
-
 from settings import AUBREY_SETTINGS
-
 
 _CLIENT_CACHE: dict[
     tuple[str | None, str | None, str | None], AzureOpenAIChatClient
@@ -29,11 +26,7 @@ _TRIAGE_EXECUTOR_ID = "medical_triage_agent_executor"
 _CARE_NAV_EXECUTOR_ID = "care_navigator_agent_executor"
 
 
-def get_chat_client(
-    api_key: str | None,
-    endpoint: str | None,
-    deployment: str | None,
-) -> AzureOpenAIChatClient:
+def get_chat_client(api_key: str | None, endpoint: str | None, deployment: str | None) -> AzureOpenAIChatClient:
     cache_key = (api_key, endpoint, deployment)
     client = _CLIENT_CACHE.get(cache_key)
     if client is None:
@@ -44,6 +37,31 @@ def get_chat_client(
         )
         _CLIENT_CACHE[cache_key] = client
     return client
+
+
+def create_message_store_factory(thread_id: str):
+    """Factory function for creating Cosmos DB message stores with a specific thread_id.
+    
+    This enables both agents to share memory for the same user/conversation thread.
+    
+    Args:
+        thread_id: Unique identifier for the user's conversation thread
+        
+    Returns:
+        Factory function that creates CosmosDBChatMessageStore instances
+    """
+    from tools.cosmos_message_store import CosmosDBChatMessageStore
+    
+    def factory():
+        return CosmosDBChatMessageStore(
+            cosmos_endpoint=AUBREY_SETTINGS.cosmos_endpoint,
+            cosmos_key=AUBREY_SETTINGS.cosmos_key,
+            thread_id=thread_id,
+            database_name=AUBREY_SETTINGS.cosmos_database_name,
+            container_name=AUBREY_SETTINGS.cosmos_container_name,
+            max_messages=AUBREY_SETTINGS.cosmos_max_messages,
+        )
+    return factory
 
 
 @executor(id="entry_dispatcher")
@@ -118,13 +136,30 @@ def _condition_medical_emergency(message: Any) -> bool:
         return False
 
 
-def create_workflow() -> Workflow:
+def create_workflow(thread_id: str | None = None) -> Workflow:
+    """Create the workflow with optional thread_id for shared memory.
+    
+    Args:
+        thread_id: Optional thread ID for persisting conversation memory.
+                  If provided, both agents will share memory for this thread.
+                  If None, agents will use default in-memory storage.
+    """
+    
+    # Create the message store factory if thread_id is provided
+    if thread_id:
+        print(f"🧠 Creating workflow WITH persistent memory (thread_id: {thread_id})")
+        message_store_factory = create_message_store_factory(thread_id)
+    else:
+        print("🧠 Creating workflow WITHOUT persistent memory (in-memory only)")
+        message_store_factory = None
+    
     med_triage_agent_executor = create_triage_executor_agent(
         get_chat_client(
             AUBREY_SETTINGS.azure_openai_api_key,
             AUBREY_SETTINGS.azure_openai_endpoint,
             AUBREY_SETTINGS.azure_openai_triage_model,
-        )
+        ),
+        chat_message_store_factory=message_store_factory,
     )
 
     care_navigator_executor = create_care_navigator_executor(
@@ -132,7 +167,8 @@ def create_workflow() -> Workflow:
             AUBREY_SETTINGS.azure_openai_api_key,
             AUBREY_SETTINGS.azure_openai_endpoint,
             AUBREY_SETTINGS.azure_openai_care_nav_model,
-        )
+        ),
+        chat_message_store_factory=message_store_factory,
     )
 
     return (

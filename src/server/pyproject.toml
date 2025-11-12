@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "dr-indigo-server"
 version = "0.1.0"
@@ -21,6 +25,7 @@ dependencies = [
     "azure-search-documents>=11.6.0",
     "pydantic-settings>=2.6.0",
     "langfuse>=3.9.0",
+    "azure-cosmos>=4.14.1",
 ]
 
 [dependency-groups]
@@ -106,3 +111,7 @@ docstring-code-format = false
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
+
+[tool.setuptools.packages.find]
+include = ["agents*", "tools*"]
+exclude = ["data*"]

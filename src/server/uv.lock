@@ -461,6 +461,19 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-cosmos"
+version = "4.14.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/f8/c8c9d0eea10f26f8d8dcbdeb2c50e859e67437bb8cf6981d063e1f8fef10/azure_cosmos-4.14.1.tar.gz", hash = "sha256:522ce1f8a397d9a74c792261c5b43b28227180f522866f16e0cf6f2c9dbc590f", size = 2014410, upload-time = "2025-11-04T22:50:36.299Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/24/df84a460848fc264d512d7ab10ba10e068959c6a6e05fb538f75b62e0dc6/azure_cosmos-4.14.1-py3-none-any.whl", hash = "sha256:9dcbaa5837775d4cf08b96c5a8c6b2e180cb1e52fd3dffd93a38ce40484e12f3", size = 386085, upload-time = "2025-11-04T22:50:38.33Z" },
+]
+
+[[package]]
 name = "azure-identity"
 version = "1.25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -909,11 +922,12 @@ wheels = [
 [[package]]
 name = "dr-indigo-server"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "agent-framework" },
     { name = "aiohttp" },
     { name = "azure-core" },
+    { name = "azure-cosmos" },
     { name = "azure-identity" },
     { name = "azure-search-documents" },
     { name = "chromadb" },
@@ -939,6 +953,7 @@ requires-dist = [
     { name = "agent-framework", specifier = ">=1.0.0b251105" },
     { name = "aiohttp" },
     { name = "azure-core", specifier = ">=1.36.0" },
+    { name = "azure-cosmos", specifier = ">=4.14.1" },
     { name = "azure-identity" },
     { name = "azure-search-documents", specifier = ">=11.6.0" },
     { name = "chromadb", specifier = ">=1.3.3" },

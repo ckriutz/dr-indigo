@@ -2,7 +2,6 @@ from agent_framework import AgentExecutor, ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 from pydantic import BaseModel
 
-
 # Shared instructions used by both the ChatAgent and AgentExecutor
 MEDICAL_TRIAGE_INSTRUCTIONS = """
 You are a Medical Triage Agent. Your role is to analyze user input and determine whether the situation requires immediate emergency services (911 call).
@@ -60,13 +59,30 @@ class MedicalTriageResult(BaseModel):
     reason: str
 
 
-def create_triage_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
+def create_triage_executor_agent(
+    client: AzureOpenAIChatClient,
+    chat_message_store_factory=None
+) -> AgentExecutor:
+    
+    print(f"🏗️  Creating triage agent with message_store_factory: {chat_message_store_factory is not None}")
+    
+    agent = ChatAgent(
+        chat_client=client,
+        name="MedicalTriageAgent",
+        instructions=MEDICAL_TRIAGE_INSTRUCTIONS,
+        response_format=MedicalTriageResult,
+        chat_message_store_factory=chat_message_store_factory,
+    )
+    
+    # Create a thread with the message store if factory is provided
+    agent_thread = None
+    if chat_message_store_factory:
+        print("📝 Creating new thread for triage agent...")
+        agent_thread = agent.get_new_thread()
+        print("✅ Created thread for triage agent")
+
     return AgentExecutor(
-        ChatAgent(
-            chat_client=client,
-            name="MedicalTriageAgent",
-            instructions=MEDICAL_TRIAGE_INSTRUCTIONS,
-            response_format=MedicalTriageResult,
-        ),
+        agent,
         id="medical_triage_agent_executor",
+        agent_thread=agent_thread,
     )

@@ -1,8 +1,13 @@
+import logging
+
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 
 from settings import AUBREY_SETTINGS
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 def create_search_tool(index_name: str = None):
@@ -15,24 +20,24 @@ def create_search_tool(index_name: str = None):
     Returns:
         A search_tool function that takes a query string and returns search results
     """
+    # Create search client once when the tool is created
+    search_index = index_name or AUBREY_SETTINGS.search_index_name
+    search_client = SearchClient(
+        endpoint=AUBREY_SETTINGS.search_endpoint,
+        index_name=search_index,
+        credential=AzureKeyCredential(AUBREY_SETTINGS.search_api_key)
+    )
 
     def search_tool(query: str) -> str:
         """Search the knowledge base for relevant information."""
-        print("Executing search tool with query:", query)
-
-        search_key = AUBREY_SETTINGS.search_api_key
-        search_endpoint = AUBREY_SETTINGS.search_endpoint
-        search_index = index_name or AUBREY_SETTINGS.search_index_name
-
-        search_client = SearchClient(
-            endpoint=search_endpoint,
-            index_name=search_index,
-            credential=AzureKeyCredential(search_key),
-        )
-
+        logger.info(f"🔍 AI Search Tool called with query: {query[:100]}...")
+        print(f"🔍 AI Search Tool called with query: {query[:100]}...")
+        
         try:
             vector_query = VectorizableTextQuery(
-                text=query, k_nearest_neighbors=50, fields="text_vector"
+                text=query, 
+                k_nearest_neighbors=50, 
+                fields="text_vector"
             )
 
             results = search_client.search(
@@ -42,21 +47,21 @@ def create_search_tool(index_name: str = None):
                 top=5,
             )
 
-            sources_formatted = "=================\n".join(
-                [
-                    f"TITLE: {document['title']}, CONTENT: {document['chunk']}"
-                    for document in results
-                ]
-            )
+            sources = [
+                f"TITLE: {doc['title']}, CONTENT: {doc['chunk']}"
+                for doc in results
+            ]
 
-            if sources_formatted:
-                print("Search tool found sources")
-                return sources_formatted
-            else:
-                return "No relevant information found in the knowledge base."
+            result_text = "=================\n".join(sources) if sources else "No relevant information found in the knowledge base."
+            
+            logger.info(f"✅ AI Search Tool returned {len(sources)} results")
+            print(f"✅ AI Search Tool returned {len(sources)} results")
+            
+            return result_text
 
         except Exception as e:
-            print(f"Error performing search: {str(e)}")
-            return f"Error performing search: {str(e)}"
+            logger.error(f"⛔ Error performing search: {e}")
+            print(f"⛔ Error performing search: {e}")
+            return f"Error performing search: {e}"
 
     return search_tool
