@@ -14,8 +14,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agents.care_navigator_agent import create_care_navigator_agent
+from agents.memory_agent import create_memory_agent
 from settings import AUBREY_SETTINGS
-from workflow import create_message_store_factory, create_workflow, get_chat_client
+from tools.cosmos_message_store import CosmosDBChatMessageStore
+from workflow import create_workflow, get_chat_client
 
 # ------------------------------------------------------------------------------------
 # Logging
@@ -45,21 +47,21 @@ def get_or_create_thread_id(conversation_key: str = "default") -> str:
         return _thread_id_cache[conversation_key]
 
 
-def get_or_create_workflow(thread_id: str) -> Any:
-    """Return a cached workflow for a thread ID (creates if missing)."""
+def get_or_create_workflow() -> Any:
+    """Return a cached workflow (creates if missing)."""
     with _cache_lock:
-        wf = _workflow_cache.get(thread_id)
+        wf = _workflow_cache.get("workflow")
         if wf is None:
-            wf = create_workflow(thread_id=thread_id)
-            _workflow_cache[thread_id] = wf
-            logger.info("🔄 Created workflow for thread_id=%s", thread_id)
+            wf = create_workflow()
+            _workflow_cache["workflow"] = wf
+            logger.info("🔄 Created workflow.")
         return wf
 
 
 # Establish a default workflow/thread for CopilotKit actions
 DEFAULT_THREAD_KEY = "aubrey_session_2"
 DEFAULT_THREAD_ID = get_or_create_thread_id(DEFAULT_THREAD_KEY)
-DEFAULT_WORKFLOW = get_or_create_workflow(DEFAULT_THREAD_ID)
+DEFAULT_WORKFLOW = create_workflow()
 
 # ------------------------------------------------------------------------------------
 # Request / Response Models
@@ -78,6 +80,18 @@ class AskWorkflowRequest(BaseModel):
 class AskResponse(BaseModel):
     response: str
 
+
+# ------------------------------------------------------------------------------------
+# Memory Agent Helpers
+# ------------------------------------------------------------------------------------
+message_store = CosmosDBChatMessageStore(
+    cosmos_endpoint=AUBREY_SETTINGS.cosmos_endpoint,
+    cosmos_key=AUBREY_SETTINGS.cosmos_key,
+    thread_id=DEFAULT_THREAD_ID,
+    database_name=AUBREY_SETTINGS.cosmos_database_name,
+    container_name=AUBREY_SETTINGS.cosmos_container_name,
+    max_messages=AUBREY_SETTINGS.cosmos_max_messages,
+)
 
 # ------------------------------------------------------------------------------------
 # Output Extraction Helpers
@@ -134,13 +148,52 @@ async def ask_medical_question_workflow_agent(question: str) -> str:
     Handler for CopilotKit action: routes a question through the default workflow.
     """
     logger.info("Received CopilotKit medical question: %s", question)
-    return await run_workflow_question(DEFAULT_WORKFLOW, question)
+    user_message = ChatMessage(role=Role.USER, text=question)
+    workflow_response = await run_workflow_question(DEFAULT_WORKFLOW, question)
+    system_message = ChatMessage(role=Role.SYSTEM, text=workflow_response)
+    await message_store.add_messages([user_message, system_message])
+    return workflow_response
 
 
 async def get_user_info_handler(name: str, birthday: str) -> str:
     """Extract user information when provided."""
     logger.info("Received user info - name=%s birthday=%s", name, birthday)
-    return f"Thanks for the information, {name}! How can I assist you further?"
+    user_message = ChatMessage(role=Role.USER, text=f"My name is {name} and my birthday is {birthday}.")
+    system_message = ChatMessage(role=Role.SYSTEM, text=f"Thanks {name}, I've noted that your birthday is {birthday} how can I assist you further?")
+    await message_store.add_messages([user_message, system_message])
+    return system_message.text
+
+async def get_memory_summary_handler() -> str:
+    """Retrieve a summary of the user's health information from memory."""
+    try:
+        # Create memory agent
+        memory_agent = create_memory_agent(
+            get_chat_client(
+                AUBREY_SETTINGS.azure_openai_api_key,
+                AUBREY_SETTINGS.azure_openai_endpoint,
+                AUBREY_SETTINGS.azure_openai_care_nav_model,
+            )
+        )
+        
+        # Get all messages for this thread
+        messages = await message_store.list_messages()
+
+        # Extract just the text for using in the agent prompt.
+        messages_text = [msg.text for msg in messages]
+
+        print(messages_text)
+
+        response = await memory_agent.run(f"Here are the user's health information and conversation history: {messages_text}")
+        # Extract text from response
+        if hasattr(response, "text"):
+            return response.text
+        if isinstance(response, str):
+            return response
+        return str(response)
+        
+    except Exception as exc:
+        logger.error("Error retrieving memory summary: %s", exc, exc_info=True)
+        return "Looks like we don't have any history of your conversations, lets chat and build some context."
 
 
 medical_question_action = CopilotAction(
@@ -177,7 +230,14 @@ get_user_info_action = CopilotAction(
     handler=get_user_info_handler,
 )
 
-sdk = CopilotKitRemoteEndpoint(actions=[get_user_info_action, medical_question_action])
+get_memory_action = CopilotAction(
+    name="getMemorySummary",
+    description="The user sometimes wants a history of previous conversations. When the user asks for a summary of their health information from memory, this is the action that retrieves it.",
+    parameters=[],
+    handler=get_memory_summary_handler,
+)
+
+sdk = CopilotKitRemoteEndpoint(actions=[get_user_info_action, medical_question_action, get_memory_action])
 
 # ------------------------------------------------------------------------------------
 # FastAPI App Initialization
@@ -209,22 +269,16 @@ async def ask_question(payload: AskRequest) -> AskResponse:
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    try:
-        # Optional memory scope via thread_id
-        message_store_factory = None
-        if payload.thread_id:
-            message_store_factory = create_message_store_factory(payload.thread_id)
-
-        care_navigator_agent = create_care_navigator_agent(
-            get_chat_client(
-                AUBREY_SETTINGS.azure_openai_api_key,
-                AUBREY_SETTINGS.azure_openai_endpoint,
-                AUBREY_SETTINGS.azure_openai_care_nav_model,
-            ),
-            chat_message_store_factory=message_store_factory,
+    agent = create_care_navigator_agent(
+        get_chat_client(
+            AUBREY_SETTINGS.azure_openai_api_key,
+            AUBREY_SETTINGS.azure_openai_endpoint,  
+            AUBREY_SETTINGS.azure_openai_care_nav_model,
         )
+    )   
 
-        response = await care_navigator_agent.run(question)
+    try:
+        response = await agent.run(question)
 
         # Extract text
         if hasattr(response, "text"):
@@ -249,7 +303,7 @@ async def ask_question_workflow(payload: AskWorkflowRequest) -> AskResponse:
 
     thread_key = payload.thread_key or "copilotkit_session"
     thread_id = get_or_create_thread_id(thread_key)
-    workflow = get_or_create_workflow(thread_id)
+    workflow = get_or_create_workflow()
 
     logger.info("Using workflow thread_id=%s for key=%s", thread_id, thread_key)
 

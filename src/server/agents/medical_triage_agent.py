@@ -59,30 +59,18 @@ class MedicalTriageResult(BaseModel):
     reason: str
 
 
-def create_triage_executor_agent(
-    client: AzureOpenAIChatClient,
-    chat_message_store_factory=None
-) -> AgentExecutor:
+def create_triage_executor_agent(client: AzureOpenAIChatClient) -> AgentExecutor:
     
-    print(f"🏗️  Creating triage agent with message_store_factory: {chat_message_store_factory is not None}")
+    print("🏗️  Creating triage agent.")
     
     agent = ChatAgent(
         chat_client=client,
         name="MedicalTriageAgent",
         instructions=MEDICAL_TRIAGE_INSTRUCTIONS,
-        response_format=MedicalTriageResult,
-        chat_message_store_factory=chat_message_store_factory,
+        response_format=MedicalTriageResult
     )
-    
-    # Create a thread with the message store if factory is provided
-    agent_thread = None
-    if chat_message_store_factory:
-        print("📝 Creating new thread for triage agent...")
-        agent_thread = agent.get_new_thread()
-        print("✅ Created thread for triage agent")
 
     return AgentExecutor(
         agent,
         id="medical_triage_agent_executor",
-        agent_thread=agent_thread,
     )

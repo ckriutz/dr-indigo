@@ -154,7 +154,7 @@ class CosmosDBChatMessageStore:
                 )
             )
 
-            messages = []
+            messages: list[ChatMessage] = []
             for item in items:
                 message_data = item.get("message")
                 if message_data:
@@ -163,9 +163,18 @@ class CosmosDBChatMessageStore:
 
             print(f"✅ Retrieved {len(messages)} message(s) from memory")
             
+            def _preview(msg: ChatMessage) -> str:
+                # Prefer .text; fall back to .contents if present
+                if hasattr(msg, "text") and isinstance(msg.text, str):
+                    return msg.text[:50]
+                if hasattr(msg, "contents") and isinstance(msg.contents, list):
+                    combined = " ".join(str(c) for c in msg.contents if c)
+                    return combined[:50]
+                return ""
+            
             if messages:
-                print(f"  First message: {messages[0].role} - {str(messages[0].content)[:50]}...")
-                print(f"  Last message: {messages[-1].role} - {str(messages[-1].content)[:50]}...")
+                print(f"  First message: {messages[0].role} - {_preview(messages[0])}...")
+                print(f"  Last message: {messages[-1].role} - {_preview(messages[-1])}...")
 
             return messages
             

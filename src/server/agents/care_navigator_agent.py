@@ -36,46 +36,30 @@ Your goal is to ensure patients feel listened to and receive clear next steps de
 
 # Both the executor and chat agent share the same instruction set so that the
 # workflow can either call the executor directly or embed the agent elsewhere.
-def create_care_navigator_executor(
-    client: AzureOpenAIChatClient,
-    chat_message_store_factory=None
-) -> AgentExecutor:
+def create_care_navigator_executor(client: AzureOpenAIChatClient) -> AgentExecutor:
 
-    print(f"🏗️  Creating care navigator with message_store_factory: {chat_message_store_factory is not None}")
+    print("🏗️  Creating care navigator.")
 
     agent = ChatAgent(
         chat_client=client,
         tools=[ai_search_tool],
         instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
         name="CareNavigatorAgent",
-        chat_message_store_factory=chat_message_store_factory,
     )
     
-    # Create a thread with the message store if factory is provided
-    agent_thread = None
-    if chat_message_store_factory:
-        print("📝 Creating new thread for care navigator...")
-        agent_thread = agent.get_new_thread()
-        print("✅ Created thread for care navigator")
-
     return AgentExecutor(
         agent,
-        id="care_navigator_agent_executor",
-        agent_thread=agent_thread,
+        id="care_navigator_agent_executor"
     )
 
 
 # Both the executor and chat agent share the same instruction set so that the
 # workflow can either call the executor directly or embed the agent elsewhere.
-def create_care_navigator_agent(
-    client: AzureOpenAIChatClient,
-    chat_message_store_factory=None
-) -> ChatAgent:
-    print(f"🏗️  Creating care navigator agent with message_store_factory: {chat_message_store_factory is not None}")
+def create_care_navigator_agent(client: AzureOpenAIChatClient) -> ChatAgent:
+    print("🏗️  Creating care navigator agent.")
     return ChatAgent(
         chat_client=client,
         tools=[ai_search_tool],
         instructions=_CARE_NAVIGATOR_INSTRUCTIONS,
-        name="CareNavigatorAgent",
-        chat_message_store_factory=chat_message_store_factory,
+        name="CareNavigatorAgent"
     )

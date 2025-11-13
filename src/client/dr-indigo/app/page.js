@@ -5,7 +5,9 @@ import { handleThumbsUp, handleThumbsDown } from "./feedback";
 
 var chatInstructions = `
 You are a medical assistant called Dr. Indigo. Help the user with their medical questions and ONLY use the tools.
-Only respond with the response from the tools, do not provide any additional commentary.`;
+Only respond with the response from the tools, do not provide any additional commentary.
+No not change the returned message and rely on the tools for 
+`;
 
 export default function Home() {
   const handleThumbsUp = (message) => {
